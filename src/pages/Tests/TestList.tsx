@@ -4,6 +4,7 @@ import Layout from '../../components/Layout';
 import Modal from '../../components/Modal';
 import Confirm from '../../components/Confirm';
 import { useToast } from '../../components/Toast';
+import TableState from '../../components/TableState';
 import {
   listAssessments,
   createAssessment,
@@ -91,10 +92,13 @@ const TestList: React.FC = () => {
             <tr><th>Title</th><th>Status</th><th>Duration</th><th>Questions</th><th>Attempts</th><th></th></tr>
           </thead>
           <tbody>
-            {loading ? (
-              <tr><td colSpan={6} className="muted">Loading…</td></tr>
-            ) : tests.length === 0 ? (
-              <tr><td colSpan={6} className="muted">No tests yet. Create one to get started.</td></tr>
+            {loading || tests.length === 0 ? (
+              <TableState
+                loading={loading}
+                columns={6}
+                title="No tests yet"
+                hint="Create one to get started."
+              />
             ) : (
               tests.map((t) => (
                 <tr key={t.id}>

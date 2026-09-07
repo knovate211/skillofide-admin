@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import Layout from '../../components/Layout';
 import { useToast } from '../../components/Toast';
+import TableState from '../../components/TableState';
 import {
   getAssessment,
   listAttempts,
@@ -59,10 +60,13 @@ const AttemptList: React.FC = () => {
             <tr><th>Candidate</th><th>Email</th><th>Score</th><th>%</th><th>Result</th><th>Status</th><th>Submitted</th></tr>
           </thead>
           <tbody>
-            {loading ? (
-              <tr><td colSpan={7} className="muted">Loading…</td></tr>
-            ) : attempts.length === 0 ? (
-              <tr><td colSpan={7} className="muted">No attempts yet.</td></tr>
+            {loading || attempts.length === 0 ? (
+              <TableState
+                loading={loading}
+                columns={7}
+                title="No attempts yet"
+                hint="Results appear here once candidates submit."
+              />
             ) : (
               attempts.map((at, i) => (
                 <tr key={at.id || i}>

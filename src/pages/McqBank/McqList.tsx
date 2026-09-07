@@ -4,6 +4,7 @@ import Confirm from '../../components/Confirm';
 import McqForm from './McqForm';
 import McqImport from './McqImport';
 import { useToast } from '../../components/Toast';
+import TableState from '../../components/TableState';
 import { listMcq, deleteMcq, type McqQuestion } from '../../lib/api';
 
 const McqList: React.FC = () => {
@@ -58,10 +59,13 @@ const McqList: React.FC = () => {
             <tr><th>Question</th><th>Topic</th><th>Difficulty</th><th>Type</th><th>Options</th><th></th></tr>
           </thead>
           <tbody>
-            {loading ? (
-              <tr><td colSpan={6} className="muted">Loading…</td></tr>
-            ) : items.length === 0 ? (
-              <tr><td colSpan={6} className="muted">No questions yet.</td></tr>
+            {loading || items.length === 0 ? (
+              <TableState
+                loading={loading}
+                columns={6}
+                title="No questions yet"
+                hint="Add one by hand, or import a spreadsheet."
+              />
             ) : (
               items.map((q) => (
                 <tr key={q.id}>

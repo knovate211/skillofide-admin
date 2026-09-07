@@ -5,6 +5,7 @@ import Confirm from '../../components/Confirm';
 import UserEditDrawer from './UserEditDrawer';
 import AddUserModal from './AddUserModal';
 import { useToast } from '../../components/Toast';
+import TableState from '../../components/TableState';
 import { listUsers, deleteUser, type AdminUserRow } from '../../lib/api';
 import { courseName } from '../../lib/courses';
 
@@ -89,10 +90,13 @@ const UserList: React.FC = () => {
             </tr>
           </thead>
           <tbody>
-            {loading ? (
-              <tr><td colSpan={5} className="muted">Loading…</td></tr>
-            ) : users.length === 0 ? (
-              <tr><td colSpan={5} className="muted">No users found.</td></tr>
+            {loading || users.length === 0 ? (
+              <TableState
+                loading={loading}
+                columns={5}
+                title="No users found"
+                hint="Try a different search, or add a user."
+              />
             ) : (
               users.map((u) => (
                 <tr key={u.id}>

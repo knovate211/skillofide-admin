@@ -29,32 +29,38 @@ const Login: React.FC = () => {
 
   return (
     <div className="center-screen">
-      <form className="card card-pad" style={{ width: 380 }} onSubmit={submit}>
-        <div style={{ fontSize: 20, fontWeight: 800, marginBottom: 4 }}>Knovate Admin</div>
-        <p className="muted mb">Sign in with an administrator account.</p>
+      <form className="card login-card" onSubmit={submit}>
+        <div className="brand-mark" aria-hidden="true">K</div>
+        <h1>Knovate Admin</h1>
+        <p className="muted" style={{ margin: '0 0 24px' }}>Sign in with an administrator account.</p>
 
         <div className="field">
-          <label>Email</label>
+          <label htmlFor="email">Email</label>
           <input
+            id="email"
             type="email"
             value={email}
             autoFocus
+            autoComplete="username"
             onChange={(e) => setEmail(e.target.value)}
             placeholder="admin@knovate.com"
           />
         </div>
         <div className="field">
-          <label>Password</label>
+          <label htmlFor="password">Password</label>
           <input
+            id="password"
             type="password"
             value={password}
+            autoComplete="current-password"
             onChange={(e) => setPassword(e.target.value)}
+            placeholder="••••••••"
           />
         </div>
 
         {error && <div className="err mb">{error}</div>}
 
-        <button type="submit" disabled={busy} style={{ width: '100%' }}>
+        <button type="submit" disabled={busy} style={{ width: '100%', padding: '9px 14px' }}>
           {busy ? 'Signing in…' : 'Sign in'}
         </button>
       </form>

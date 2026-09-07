@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import Layout from '../../components/Layout';
 import Modal from '../../components/Modal';
 import { useToast } from '../../components/Toast';
+import TableState from '../../components/TableState';
 import {
   listAssessments,
   listScholarshipPrograms,
@@ -91,12 +92,13 @@ const ProgramList: React.FC = () => {
             </tr>
           </thead>
           <tbody>
-            {loading ? (
-              <tr><td colSpan={7} className="muted">Loading…</td></tr>
-            ) : programs.length === 0 ? (
-              <tr><td colSpan={7} className="muted">
-                No programmes yet. Add one to put a course on the scholarship page.
-              </td></tr>
+            {loading || programs.length === 0 ? (
+              <TableState
+                loading={loading}
+                columns={7}
+                title="No programmes yet"
+                hint="Add one to put a course on the scholarship page."
+              />
             ) : (
               programs.map((p) => (
                 <tr key={p.id}>

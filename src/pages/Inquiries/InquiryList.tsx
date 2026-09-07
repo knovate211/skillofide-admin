@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import Layout from '../../components/Layout';
 import Modal from '../../components/Modal';
 import { useToast } from '../../components/Toast';
+import TableState from '../../components/TableState';
 import { listInquiries, updateInquiry, type Inquiry } from '../../lib/api';
 
 const STATUSES = ['new', 'contacted', 'closed', 'spam'];
@@ -59,10 +60,13 @@ const InquiryList: React.FC = () => {
             <tr><th>Name</th><th>Email</th><th>Phone</th><th>Interest</th><th>Source</th><th>Status</th><th>Received</th><th></th></tr>
           </thead>
           <tbody>
-            {loading ? (
-              <tr><td colSpan={8} className="muted">Loading…</td></tr>
-            ) : rows.length === 0 ? (
-              <tr><td colSpan={8} className="muted">No enquiries yet.</td></tr>
+            {loading || rows.length === 0 ? (
+              <TableState
+                loading={loading}
+                columns={8}
+                title="No enquiries yet"
+                hint="Enquiries from the marketing site land here."
+              />
             ) : (
               rows.map((q) => (
                 <tr key={q.id} style={{ cursor: 'pointer' }} onClick={() => setOpen(q)}>
@@ -133,7 +137,7 @@ const InquiryDrawer: React.FC<{ inquiry: Inquiry; onClose: () => void; onChanged
       )}
       <div className="field"><label>Received</label><div className="muted">{new Date(inquiry.created_at).toLocaleString()}</div></div>
 
-      <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '16px 0' }} />
+      <hr className="sep" />
 
       <div className="field">
         <label>Status</label>

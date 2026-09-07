@@ -3,6 +3,7 @@ import Layout from '../../components/Layout';
 import Modal from '../../components/Modal';
 import Confirm from '../../components/Confirm';
 import { useToast } from '../../components/Toast';
+import TableState from '../../components/TableState';
 import {
   deleteScholarship,
   enrolScholarshipApplicant,
@@ -134,10 +135,13 @@ const ApplicationList: React.FC = () => {
             </tr>
           </thead>
           <tbody>
-            {loading ? (
-              <tr><td colSpan={9} className="muted">Loading…</td></tr>
-            ) : rows.length === 0 ? (
-              <tr><td colSpan={9} className="muted">No applications match these filters.</td></tr>
+            {loading || rows.length === 0 ? (
+              <TableState
+                loading={loading}
+                columns={9}
+                title="No applications match these filters"
+                hint="Clear a filter to widen the search."
+              />
             ) : (
               rows.map((a) => {
                 const p = pct(a);
@@ -312,7 +316,7 @@ const ApplicationDrawer: React.FC<{
       </div>
       <Row label="Applied" value={new Date(a.created_at).toLocaleString()} />
 
-      <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '16px 0' }} />
+      <hr className="sep" />
 
       {/* The email is the only way into the test, so a bounced or deleted one
           would otherwise strand the candidate entirely. */}
@@ -362,7 +366,7 @@ const ApplicationDrawer: React.FC<{
         )}
       </div>
 
-      <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '16px 0' }} />
+      <hr className="sep" />
 
       <div className="field">
         <label>Internal notes</label>
@@ -372,7 +376,7 @@ const ApplicationDrawer: React.FC<{
         <button className="secondary sm" disabled={busy} onClick={saveNotes}>Save notes</button>
       </div>
 
-      <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '16px 0' }} />
+      <hr className="sep" />
 
       <div className="field">
         <label>Award decision</label>
@@ -395,7 +399,7 @@ const ApplicationDrawer: React.FC<{
         </div>
       </div>
 
-      <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '16px 0' }} />
+      <hr className="sep" />
 
       {/* An applicant is not a student. This is where that changes, and it is a
           button somebody presses once the fee is settled — not something the
@@ -411,7 +415,7 @@ const ApplicationDrawer: React.FC<{
         </button>
       </div>
 
-      <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '16px 0' }} />
+      <hr className="sep" />
 
       <div className="row between" style={{ alignItems: 'center' }}>
         <button className="danger sm" disabled={busy} onClick={() => setConfirmDelete(true)}>
