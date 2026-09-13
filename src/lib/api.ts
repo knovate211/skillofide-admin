@@ -231,6 +231,8 @@ export interface Assessment {
   shuffle_questions?: boolean;
   shuffle_options?: boolean;
   allow_backtrack?: boolean;
+  /** Reveal the paper one question at a time; the next unlocks once this one is answered. */
+  lock_forward?: boolean;
   reveal_results?: boolean;
   status?: string; // draft | published | archived
   max_attempts?: number;

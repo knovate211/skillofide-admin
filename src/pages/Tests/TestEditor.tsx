@@ -64,6 +64,7 @@ const TestEditor: React.FC = () => {
         shuffle_questions: !!a.shuffle_questions,
         shuffle_options: !!a.shuffle_options,
         allow_backtrack: !!a.allow_backtrack,
+        lock_forward: !!a.lock_forward,
         reveal_results: !!a.reveal_results,
         purpose: a.purpose || 'practice',
       });
@@ -168,6 +169,7 @@ const TestEditor: React.FC = () => {
           <label className="row" style={{ gap: 6 }}><input type="checkbox" style={{ width: 'auto' }} checked={!!a.shuffle_questions} onChange={(e) => patch({ shuffle_questions: e.target.checked })} /> Shuffle questions</label>
           <label className="row" style={{ gap: 6 }}><input type="checkbox" style={{ width: 'auto' }} checked={!!a.shuffle_options} onChange={(e) => patch({ shuffle_options: e.target.checked })} /> Shuffle options</label>
           <label className="row" style={{ gap: 6 }}><input type="checkbox" style={{ width: 'auto' }} checked={!!a.allow_backtrack} onChange={(e) => patch({ allow_backtrack: e.target.checked })} /> Allow backtrack</label>
+          <label className="row" style={{ gap: 6 }} title="Candidates see one question at a time; the next unlocks once the current one is answered."><input type="checkbox" style={{ width: 'auto' }} checked={!!a.lock_forward} onChange={(e) => patch({ lock_forward: e.target.checked })} /> One question at a time</label>
           <label className="row" style={{ gap: 6 }}><input type="checkbox" style={{ width: 'auto' }} checked={!!a.reveal_results} onChange={(e) => patch({ reveal_results: e.target.checked })} /> Reveal results</label>
         </div>
         <button disabled={busy} onClick={saveSettings}>{busy ? 'Saving…' : 'Save settings'}</button>
