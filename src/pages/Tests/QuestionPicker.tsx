@@ -1,12 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import Modal from '../../components/Modal';
 import { useToast } from '../../components/Toast';
+import { courseName, useCourses } from '../../lib/courses';
 import {
   listMcq,
-  listProblems,
+  listProblemsAdmin,
   setSectionQuestions,
   type McqQuestion,
-  type ProblemSummary,
   type Section,
   type SectionQuestion,
 } from '../../lib/api';
@@ -18,6 +19,8 @@ interface Item {
   id: string;
   label: string;
   meta: string;
+  /** MCQ only: course id, '' for General. */
+  course?: string;
 }
 
 const QuestionPicker: React.FC<{
@@ -32,6 +35,8 @@ const QuestionPicker: React.FC<{
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [search, setSearch] = useState('');
+  const [course, setCourse] = useState('all');
+  const courses = useCourses();
   const [selected, setSelected] = useState<Record<string, number>>(() => {
     const init: Record<string, number> = {};
     section.questions?.forEach((q) => {
@@ -45,15 +50,23 @@ const QuestionPicker: React.FC<{
     (async () => {
       try {
         if (isCoding) {
-          const probs: ProblemSummary[] = await listProblems();
-          setItems(probs.map((p) => ({ id: p.id, label: p.title, meta: p.difficulty })));
+          // The admin list includes test-only (private) problems, which the
+          // public practice list deliberately hides.
+          const res = await listProblemsAdmin('page_size=1000');
+          setItems(res.problems.map((p) => ({
+            id: p.id,
+            label: p.title,
+            meta: `${p.course_id ? courseName(p.course_id) : 'General'} · ${p.difficulty}${p.verified ? ' · ✓ checked' : ''}`,
+            course: p.course_id || '',
+          })));
         } else {
           const res = await listMcq('pageSize=300');
           setItems(
             (res.questions || []).map((q: McqQuestion) => ({
               id: q.id!,
               label: q.body,
-              meta: `${q.topic} · ${q.difficulty} · ${q.kind}`,
+              meta: `${q.course_id ? courseName(q.course_id) : 'General'} · ${q.topic} · ${q.difficulty} · ${q.kind}`,
+              course: q.course_id || '',
             })),
           );
         }
@@ -67,9 +80,12 @@ const QuestionPicker: React.FC<{
 
   const filtered = useMemo(() => {
     const v = search.trim().toLowerCase();
-    if (!v) return items;
-    return items.filter((it) => it.label.toLowerCase().includes(v) || it.meta.toLowerCase().includes(v));
-  }, [items, search]);
+    return items.filter(
+      (it) =>
+        (course === 'all' || it.course === course) &&
+        (!v || it.label.toLowerCase().includes(v) || it.meta.toLowerCase().includes(v)),
+    );
+  }, [items, search, course]);
 
   const toggle = (id: string) =>
     setSelected((s) => {
@@ -100,12 +116,18 @@ const QuestionPicker: React.FC<{
   };
 
   const count = Object.keys(selected).length;
+  const countIn = (c: string) => items.filter((it) => it.course === c).length;
   const emptyMsg = isCoding
-    ? 'No coding problems available. Seed problems in the problem-service first.'
+    ? 'No coding problems yet. Create one under Coding Problems.'
     : 'The question bank is empty. Add questions under Question Bank first.';
 
   return (
     <Modal title={`Questions — ${section.title}`} onClose={onClose} variant="drawer">
+      <select className="mb" value={course} onChange={(e) => setCourse(e.target.value)}>
+        <option value="all">All courses ({items.length})</option>
+        <option value="">General ({countIn('')})</option>
+        {courses.map((c) => <option key={c.id} value={c.id}>{c.name} ({countIn(c.id)})</option>)}
+      </select>
       <input
         className="mb"
         placeholder={isCoding ? 'Search problems…' : 'Search question bank…'}
@@ -117,6 +139,15 @@ const QuestionPicker: React.FC<{
         <div className="muted">Loading…</div>
       ) : items.length === 0 ? (
         <div className="muted">{emptyMsg}</div>
+      ) : filtered.length === 0 ? (
+        <div className="notice">
+          {search.trim()
+            ? 'Nothing matches your search.'
+            : <>No {isCoding ? 'coding problems' : 'questions'} in {course === '' ? 'General' : courseName(course)} yet.{' '}
+                <Link to={isCoding ? '/problems/new' : `/mcq-bank?course=${encodeURIComponent(course || '__general')}`} onClick={onClose}>
+                  {isCoding ? 'Create a problem' : 'Add questions to this course'}
+                </Link>{' '}or pick another course.</>}
+        </div>
       ) : (
         <div>
           {filtered.map((it) => {

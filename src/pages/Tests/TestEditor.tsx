@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import Layout from '../../components/Layout';
 import Confirm from '../../components/Confirm';
 import QuestionPicker from './QuestionPicker';
+import DrawSettings from './DrawSettings';
 import { useToast } from '../../components/Toast';
 import {
   getAssessment,
@@ -10,9 +11,21 @@ import {
   publishAssessment,
   upsertSection,
   deleteSection,
+  GENERAL_COURSE,
   type Assessment,
   type Section,
 } from '../../lib/api';
+import { courseName, useCourses } from '../../lib/courses';
+
+// One line describing where a random-draw section's questions come from.
+function drawSummary(s: Section): string {
+  const from =
+    !s.pick_course ? 'any course'
+    : s.pick_course === GENERAL_COURSE ? 'General questions'
+    : courseName(s.pick_course);
+  const parts = [from, s.pick_topic, s.pick_difficulty].filter(Boolean);
+  return `Random: ${s.pick_count} per candidate from ${parts.join(' · ')}, ${s.pick_marks || 1} mark${(s.pick_marks || 1) === 1 ? '' : 's'} each`;
+}
 
 const SECTION_KINDS = [
   { value: 'mcq', label: 'MCQ' },
@@ -24,11 +37,13 @@ const TestEditor: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const { push } = useToast();
   const navigate = useNavigate();
+  const courses = useCourses();
   const [a, setA] = useState<Assessment | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [pickerSection, setPickerSection] = useState<Section | null>(null);
   const [deletingSection, setDeletingSection] = useState<Section | null>(null);
+  const [drawSection, setDrawSection] = useState<Section | null>(null);
 
   // new-section form
   const [secTitle, setSecTitle] = useState('');
@@ -67,6 +82,7 @@ const TestEditor: React.FC = () => {
         lock_forward: !!a.lock_forward,
         reveal_results: !!a.reveal_results,
         purpose: a.purpose || 'practice',
+        course_ids: a.course_ids || [],
       });
       push('success', 'Settings saved');
       load();
@@ -172,6 +188,50 @@ const TestEditor: React.FC = () => {
           <label className="row" style={{ gap: 6 }} title="Candidates see one question at a time; the next unlocks once the current one is answered."><input type="checkbox" style={{ width: 'auto' }} checked={!!a.lock_forward} onChange={(e) => patch({ lock_forward: e.target.checked })} /> One question at a time</label>
           <label className="row" style={{ gap: 6 }}><input type="checkbox" style={{ width: 'auto' }} checked={!!a.reveal_results} onChange={(e) => patch({ reveal_results: e.target.checked })} /> Reveal results</label>
         </div>
+        {a.purpose === 'practice' && (
+          <div className="audience mb">
+            <label>Who can take this test</label>
+            <div className="row wrap" style={{ gap: 18, marginBottom: 8 }}>
+              <label className="row radio">
+                <input type="radio" checked={!a.course_ids?.length} onChange={() => patch({ course_ids: [] })} />
+                All students
+              </label>
+              <label className="row radio">
+                <input type="radio" checked={!!a.course_ids?.length}
+                  onChange={() => patch({ course_ids: a.course_ids?.length ? a.course_ids : courses.slice(0, 1).map((c) => c.id) })} />
+                Only students of these courses
+              </label>
+            </div>
+            {!!a.course_ids?.length && (
+              <div className="course-pick">
+                {courses.map((c) => {
+                  const on = a.course_ids!.includes(c.id);
+                  return (
+                    <label key={c.id} className={`course-chip${on ? ' on' : ''}`}>
+                      <input
+                        type="checkbox"
+                        checked={on}
+                        onChange={() => {
+                          const next = on ? a.course_ids!.filter((x) => x !== c.id) : [...a.course_ids!, c.id];
+                          patch({ course_ids: next });
+                        }}
+                      />
+                      {c.name}
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+            <p className="muted small" style={{ margin: '6px 0 0' }}>
+              {a.course_ids?.length
+                ? `Only students enrolled in ${a.course_ids.map(courseName).join(', ')} see this test and can start it.`
+                : 'Every signed-in student sees this test in their practice list.'}
+            </p>
+          </div>
+        )}
+        {a.purpose === 'scholarship' && (
+          <p className="muted small mb">Scholarship tests are invite-only: candidates reach them through the scholarship application, not the practice list.</p>
+        )}
         <button disabled={busy} onClick={saveSettings}>{busy ? 'Saving…' : 'Save settings'}</button>
       </div>
 
@@ -186,10 +246,21 @@ const TestEditor: React.FC = () => {
               <div>
                 <strong>{s.title}</strong>{' '}
                 <span className="badge draft">{s.kind}</span>{' '}
-                <span className="muted">{s.questions?.length || 0} question(s)</span>
+                {s.pick_count ? (
+                  <span className="muted">{drawSummary(s)}</span>
+                ) : (
+                  <span className="muted">{s.questions?.length || 0} question(s)</span>
+                )}
               </div>
               <div className="row">
-                <button className="secondary sm" onClick={() => setPickerSection(s)}>Manage questions</button>
+                {s.kind === 'mcq' && (
+                  <button className="secondary sm" onClick={() => setDrawSection(s)}>
+                    {s.pick_count ? 'Random draw settings' : 'Random draw…'}
+                  </button>
+                )}
+                <button className="secondary sm" onClick={() => setPickerSection(s)}>
+                  {s.kind === 'mcq' ? 'Pick questions' : 'Manage questions'}
+                </button>
                 <button className="ghost sm" onClick={() => setDeletingSection(s)}>Remove</button>
               </div>
             </div>
@@ -220,6 +291,15 @@ const TestEditor: React.FC = () => {
           section={pickerSection}
           onClose={() => setPickerSection(null)}
           onSaved={() => { setPickerSection(null); load(); }}
+        />
+      )}
+
+      {drawSection && id && (
+        <DrawSettings
+          assessmentId={id}
+          section={drawSection}
+          onClose={() => setDrawSection(null)}
+          onSaved={() => { setDrawSection(null); load(); }}
         />
       )}
 

@@ -10,7 +10,7 @@ const Login: React.FC = () => {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (isAdmin()) navigate('/users', { replace: true });
+    if (isAdmin()) navigate('/dashboard', { replace: true });
   }, [navigate]);
 
   const submit = async (e: React.FormEvent) => {
@@ -19,7 +19,7 @@ const Login: React.FC = () => {
     setBusy(true);
     try {
       await login(email.trim(), password);
-      navigate('/users', { replace: true });
+      navigate('/dashboard', { replace: true });
     } catch (err: any) {
       setError(err.message || 'Failed to authenticate');
     } finally {

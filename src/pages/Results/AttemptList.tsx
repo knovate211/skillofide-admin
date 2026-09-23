@@ -65,7 +65,12 @@ const AttemptList: React.FC = () => {
               <tr><td colSpan={7} className="muted">No attempts yet.</td></tr>
             ) : (
               attempts.map((at, i) => (
-                <tr key={at.id || i}>
+                <tr
+                  key={at.id || i}
+                  className={at.id ? 'clickable' : ''}
+                  onClick={() => at.id && navigate(`/tests/${id}/results/${at.id}`)}
+                  title="Open answers, grading and proctoring"
+                >
                   <td>{at.user_name || '—'}</td>
                   <td>{at.user_email || '—'}</td>
                   <td>{at.score != null ? `${at.score}${at.max_score != null ? ` / ${at.max_score}` : ''}` : '—'}</td>
