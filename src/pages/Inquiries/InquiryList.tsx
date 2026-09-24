@@ -194,7 +194,10 @@ const InquiryList: React.FC = () => {
                   <td onClick={(e) => e.stopPropagation()}>
                     <input type="checkbox" checked={sel.has(q.id)} onChange={() => sel.toggle(q.id)} aria-label={`Select ${q.email}`} />
                   </td>
-                  <td>{q.name}</td>
+                  <td>
+                    {q.name}
+                    {q.company && <div className="muted" style={{ fontSize: 12 }}>{q.company}</div>}
+                  </td>
                   <td>{q.email}</td>
                   <td className="nowrap">{q.phone || '—'}</td>
                   <td>{q.interest || '—'}</td>
@@ -277,6 +280,10 @@ const InquiryDrawer: React.FC<{ inquiry: Inquiry; onClose: () => void; onChanged
       <Row label="Email" value={inquiry.email} />
       <Row label="Phone" value={inquiry.phone} />
       <Row label="WhatsApp" value={inquiry.whatsapp} />
+      <Row label="Company" value={inquiry.company || ''} />
+      <Row label="Role" value={inquiry.job_title || ''} />
+      <Row label="Company size" value={inquiry.company_size || ''} />
+      <Row label="Hires per year" value={inquiry.hiring_volume || ''} />
       <Row label="Interested in" value={inquiry.interest} />
       <Row label="Source" value={inquiry.source} />
       {inquiry.page_url && (

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { login, isAdmin } from '../lib/auth';
+import { login, isStaff, homePath } from '../lib/auth';
 
 const Login: React.FC = () => {
   const navigate = useNavigate();
@@ -10,7 +10,7 @@ const Login: React.FC = () => {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (isAdmin()) navigate('/dashboard', { replace: true });
+    if (isStaff()) navigate(homePath(), { replace: true });
   }, [navigate]);
 
   const submit = async (e: React.FormEvent) => {
@@ -19,7 +19,7 @@ const Login: React.FC = () => {
     setBusy(true);
     try {
       await login(email.trim(), password);
-      navigate('/dashboard', { replace: true });
+      navigate(homePath(), { replace: true });
     } catch (err: any) {
       setError(err.message || 'Failed to authenticate');
     } finally {
@@ -31,7 +31,7 @@ const Login: React.FC = () => {
     <div className="center-screen">
       <form className="card card-pad" style={{ width: 380 }} onSubmit={submit}>
         <div style={{ fontSize: 20, fontWeight: 800, marginBottom: 4 }}>Knovate Admin</div>
-        <p className="muted mb">Sign in with an administrator account.</p>
+        <p className="muted mb">Sign in with your admin or recruiter account.</p>
 
         <div className="field">
           <label>Email</label>

@@ -5,6 +5,7 @@ import Confirm from '../../components/Confirm';
 import TypeConfirm from '../../components/TypeConfirm';
 import UserEditDrawer from './UserEditDrawer';
 import AddUserModal from './AddUserModal';
+import { useOpenOnNew } from '../../lib/useOpenOnNew';
 import { useToast } from '../../components/Toast';
 import {
   listUsers,
@@ -52,6 +53,7 @@ const UserList: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<AdminUserRow | null>(null);
   const [adding, setAdding] = useState(false);
+  useOpenOnNew(() => setAdding(true));
   const [deleting, setDeleting] = useState<AdminUserRow | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkPick, setBulkPick] = useState('');
@@ -254,7 +256,16 @@ const UserList: React.FC = () => {
                   </td>
                   <td>{u.name}{u.id === me && <span className="muted small"> (you)</span>}</td>
                   <td>{u.email}</td>
-                  <td><span className={`badge ${u.role}`}>{u.role}</span></td>
+                  <td>
+                    <span className={`badge ${u.role}`}>{u.role}</span>
+                    {u.role === 'recruiter' && (
+                      <div className="small" style={{ marginTop: 4 }}>
+                        {u.companies?.length
+                          ? u.companies.map((c) => c.name).join(', ')
+                          : <span style={{ color: 'var(--danger)' }}>No company</span>}
+                      </div>
+                    )}
+                  </td>
                   <td>
                     {u.course_ids.length === 0 ? (
                       <span className="muted">—</span>

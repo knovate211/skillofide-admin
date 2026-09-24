@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Modal from '../../components/Modal';
 import { useToast } from '../../components/Toast';
 import {
@@ -6,7 +6,10 @@ import {
   updateUser,
   grantCourse,
   revokeCourse,
+  listCompanies,
+  addCompanyMember,
   type AdminUserRow,
+  type Company,
 } from '../../lib/api';
 import { useCourses, courseName } from '../../lib/courses';
 
@@ -27,6 +30,32 @@ const UserEditDrawer: React.FC<Props> = ({ user, onClose, onChanged }) => {
   const [courses, setCourses] = useState<string[]>(user.course_ids);
   const [addCourse, setAddCourse] = useState('');
   const [busy, setBusy] = useState(false);
+  const [memberOf, setMemberOf] = useState(user.companies || []);
+  const [allCompanies, setAllCompanies] = useState<Company[]>([]);
+  const [addCompany, setAddCompany] = useState('');
+
+  // Companies are only relevant once the user is a recruiter.
+  useEffect(() => {
+    if (role !== 'recruiter') return;
+    listCompanies().then((r) => setAllCompanies(r.companies || [])).catch(() => setAllCompanies([]));
+  }, [role]);
+
+  const doAddCompany = async () => {
+    const c = allCompanies.find((x) => x.id === addCompany);
+    if (!c) return;
+    setBusy(true);
+    try {
+      await addCompanyMember(c.id, user.id, 'recruiter');
+      setMemberOf((m) => [...m, { id: c.id, name: c.name, role: 'recruiter' }]);
+      setAddCompany('');
+      push('success', `Added to ${c.name}`);
+      onChanged();
+    } catch (e: any) {
+      push('error', e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const saveRole = async (newRole: string) => {
     setBusy(true);
@@ -117,6 +146,31 @@ const UserEditDrawer: React.FC<Props> = ({ user, onClose, onChanged }) => {
           {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
         </select>
       </div>
+
+      {role === 'recruiter' && (
+        <div className="field">
+          <label>Company</label>
+          <div className="row wrap mb">
+            {memberOf.length === 0 && (
+              <span style={{ color: 'var(--danger)' }}>
+                Not linked to a company. They can sign in but will see nothing until you add them to one.
+              </span>
+            )}
+            {memberOf.map((c) => (
+              <span key={c.id} className="chip">{c.name}{c.role === 'owner' ? ' (owner)' : ''}</span>
+            ))}
+          </div>
+          <div className="row">
+            <select className="grow" value={addCompany} onChange={(e) => setAddCompany(e.target.value)}>
+              <option value="">{allCompanies.length ? 'Add to a company…' : 'No companies yet — create one under Companies'}</option>
+              {allCompanies.filter((c) => !memberOf.some((m) => m.id === c.id)).map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+            <button disabled={busy || !addCompany} onClick={doAddCompany}>Add</button>
+          </div>
+        </div>
+      )}
 
       <div className="field">
         <label>Enrolled courses</label>

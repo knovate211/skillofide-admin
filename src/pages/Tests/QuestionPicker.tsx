@@ -3,8 +3,10 @@ import { Link } from 'react-router-dom';
 import Modal from '../../components/Modal';
 import { useToast } from '../../components/Toast';
 import { courseName, useCourses } from '../../lib/courses';
+import { isRecruiter } from '../../lib/auth';
 import {
   listMcq,
+  listProblems,
   listProblemsAdmin,
   setSectionQuestions,
   type McqQuestion,
@@ -49,7 +51,12 @@ const QuestionPicker: React.FC<{
   useEffect(() => {
     (async () => {
       try {
-        if (isCoding) {
+        if (isCoding && isRecruiter()) {
+          // Recruiters pick from the public problem library. Private problems
+          // belong to other tests (scholarship papers, other companies).
+          const problems = await listProblems();
+          setItems(problems.map((p) => ({ id: p.id, label: p.title, meta: p.difficulty, course: '' })));
+        } else if (isCoding) {
           // The admin list includes test-only (private) problems, which the
           // public practice list deliberately hides.
           const res = await listProblemsAdmin('page_size=1000');

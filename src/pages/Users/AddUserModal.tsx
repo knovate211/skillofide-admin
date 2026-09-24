@@ -137,6 +137,12 @@ const AddUserModal: React.FC<{ onClose: () => void; onCreated: () => void }> = (
           <select value={role} onChange={(e) => setRole(e.target.value)}>
             {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
           </select>
+          {role === 'recruiter' && (
+            <p className="muted small" style={{ margin: '6px 0 0' }}>
+              A recruiter only sees the companies they belong to. After creating the account, add it to a company
+              under Hiring → Companies → Recruiters.
+            </p>
+          )}
         </div>
         <div className="field">
           <label>Enrolled courses</label>

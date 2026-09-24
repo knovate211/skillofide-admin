@@ -2,6 +2,10 @@
 // Every request carries the admin Bearer token. A 401 clears the session and
 // bounces to /login.
 import { getToken, logout } from './auth';
+// Recruiter calls carry the company they are working in. company.ts imports
+// this module too; the cycle is safe because both only call each other at
+// request time, never while loading.
+import { currentCompanyId, withCompany } from './company';
 
 async function request<T>(
   method: string,
@@ -53,6 +57,8 @@ export interface AdminUserRow {
   role: string;
   course_ids: string[];
   created_at: string;
+  /** Companies this user recruits for; empty for non-recruiters. */
+  companies?: { id: string; name: string; role: string }[];
 }
 
 export interface ListUsersResponse {
@@ -167,9 +173,36 @@ export interface AdminStats {
   answers_to_grade: number;
   classes_active: number;
   signups_30d: { day: string; count: number }[];
+
+  // Last week against the week before, for the trend arrows.
+  users_new_prev_7d: number;
+  enquiries_prev_7d: number;
+  scholarship_prev_7d: number;
+  attempts_prev_7d: number;
+  /** Sign-ups per day over `signups_days`, split into students and staff. */
+  signups_days: number;
+  signups_by_role: { day: string; students: number; staff: number }[];
+  /** The same split for the equally long window before it. */
+  signups_prev: { students: number; staff: number };
+  /** Daily counts for the last 14 days, oldest first. */
+  spark: Record<'signups' | 'enquiries' | 'scholarship' | 'attempts' | 'enrolments' | 'submissions', number[]>;
 }
 
-export const getStats = () => request<AdminStats>('GET', '/api/admin/stats');
+export const getStats = (days: 7 | 30 | 90 = 30) => request<AdminStats>('GET', `/api/admin/stats?days=${days}`);
+
+export interface ActivityItem {
+  at: string;
+  name: string;
+  email: string;
+  text: string;
+  kind: 'enrolled' | 'test' | 'scholarship' | 'enquiry' | 'joined';
+  link_to?: string;
+  /** Course id for enrolments and scholarship applications. */
+  course?: string;
+}
+
+export const getActivity = (limit = 8) =>
+  request<{ items: ActivityItem[] }>('GET', `/api/admin/activity?limit=${limit}`);
 
 export interface GradingQueueItem {
   attempt_id: string;
@@ -253,6 +286,11 @@ export interface Inquiry {
   status: string; // new | contacted | closed
   notes: string;
   created_at: string;
+  /** Set only on company leads for the hiring-test platform. */
+  company?: string;
+  job_title?: string;
+  company_size?: string;
+  hiring_volume?: string;
 }
 
 export interface ListInquiriesResponse {
@@ -386,6 +424,8 @@ export interface Section {
 export interface Assessment {
   id?: string;
   company_id?: string;
+  /** Read-only: the owning company's name, for hiring tests. */
+  company_name?: string;
   title: string;
   description?: string;
   purpose?: string; // practice | hiring | scholarship
@@ -409,10 +449,94 @@ export interface Assessment {
   created_at?: string;
 }
 
+// ─── Companies & hiring invites ───────────────────────────────────────────────
+
+export interface Company {
+  id: string;
+  name: string;
+  slug?: string;
+  logo_url?: string;
+  website?: string;
+  created_at?: string;
+}
+
+export const listCompanies = () =>
+  request<{ companies: Company[] }>('GET', '/api/recruiter/companies');
+
+export const createCompany = (c: { name: string; website?: string; logo_url?: string }) =>
+  request<Company>('POST', '/api/recruiter/companies', c);
+
+export interface CompanyMember {
+  company_id: string;
+  user_id: string;
+  email?: string;
+  name?: string;
+  role: string; // recruiter | owner
+}
+
+export const listCompanyMembers = (companyId: string) =>
+  request<{ members: CompanyMember[] }>('GET', `/api/recruiter/companies/${companyId}/members`);
+
+/** Admin only. Re-adding an existing member just updates their role. */
+export const addCompanyMember = (companyId: string, userId: string, role: 'recruiter' | 'owner' = 'recruiter') =>
+  request<unknown>('POST', `/api/recruiter/companies/${companyId}/members`, { user_id: userId, role });
+
+// ─── Hiring candidates ──────────────────────────────────────────────────────
+// Candidates live in their own table (not All Users). Adding one emails them a
+// personal link that signs them straight into the test. The link is never
+// returned here: it is a login credential and only the candidate receives it.
+
+export interface HiringCandidate {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  /** invited | opened | in_progress | submitted | evaluating | evaluated | disqualified | expired */
+  status: string;
+  added_at: string;
+  emailed_at?: string;
+  email_error?: string;
+  expires_at?: string;
+  opened_at?: string;
+  submitted_at?: string;
+  attempt_id?: string;
+  score?: number;
+  max_score?: number;
+}
+
+export interface CandidateInput {
+  name: string;
+  email: string;
+  phone?: string;
+}
+
+export interface AddCandidatesResult {
+  results: { email: string; status: 'added' | 'updated' | 'skipped'; message?: string }[];
+  added: number;
+  email_enabled: boolean;
+}
+
+export const listHiringCandidates = (assessmentId: string) =>
+  request<{ candidates: HiringCandidate[] }>('GET', `/api/hiring/assessments/${assessmentId}/candidates`);
+
+export const addHiringCandidates = (assessmentId: string, candidates: CandidateInput[], expiresAt?: string) =>
+  request<AddCandidatesResult>('POST', `/api/hiring/assessments/${assessmentId}/candidates`, {
+    candidates,
+    expires_at: expiresAt || undefined,
+  });
+
+/** Sends a fresh link (the old one stops working) valid for another 7 days. */
+export const resendHiringCandidate = (candidateId: string) =>
+  request<{ resent: boolean; email_enabled: boolean }>('POST', `/api/hiring/candidates/${candidateId}/resend`);
+
+/** Only before the candidate has started; afterwards their result is kept. */
+export const removeHiringCandidate = (candidateId: string) =>
+  request<unknown>('DELETE', `/api/hiring/candidates/${candidateId}`);
+
 export const listAssessments = (params = '') =>
   request<{ assessments: Assessment[]; total: number }>(
     'GET',
-    `/api/recruiter/assessments${params ? `?${params}` : ''}`,
+    `/api/recruiter/assessments?${withCompany(params)}`,
   );
 
 export const createAssessment = (a: Assessment) =>
@@ -487,11 +611,18 @@ async function graphql<T>(query: string, variables: Record<string, unknown> = {}
 }
 
 export async function listProblems(search = ''): Promise<ProblemSummary[]> {
-  const data = await graphql<{ listProblems: { problems: ProblemSummary[] } }>(
-    `query($pageSize: Int){ listProblems(pageSize: $pageSize){ problems { id title difficulty } } }`,
-    { pageSize: 300 },
-  );
-  const all = data.listProblems?.problems || [];
+  // problem-service serves at most 100 per page (larger sizes fall back to
+  // 50), so walk the pages rather than ask for everything at once.
+  const all: ProblemSummary[] = [];
+  for (let page = 1; page <= 50; page++) {
+    const data = await graphql<{ listProblems: { problems: ProblemSummary[]; total: number } }>(
+      `query($page: Int, $pageSize: Int){ listProblems(page: $page, pageSize: $pageSize){ problems { id title difficulty } total } }`,
+      { page, pageSize: 100 },
+    );
+    const batch = data.listProblems?.problems || [];
+    all.push(...batch);
+    if (batch.length < 100 || all.length >= (data.listProblems?.total ?? 0)) break;
+  }
   const v = search.trim().toLowerCase();
   return v ? all.filter((p) => p.title.toLowerCase().includes(v)) : all;
 }
@@ -596,7 +727,7 @@ export const verifyProblem = (id: string, language: string, code: string) =>
 export const listMcq = (params = '') =>
   request<{ questions: McqQuestion[]; total: number }>(
     'GET',
-    `/api/recruiter/mcq-bank${params ? `?${params}` : ''}`,
+    `/api/recruiter/mcq-bank?${withCompany(params)}`,
   );
 
 /** Selects questions with no course in listMcq / getMcqFacets. */
@@ -605,18 +736,24 @@ export const GENERAL_COURSE = '__general';
 export const getMcqFacets = (course = '') =>
   request<{ course: Facet[]; topic: Facet[]; difficulty: Facet[] }>(
     'GET',
-    `/api/admin/mcq-bank/facets${course ? `?course=${encodeURIComponent(course)}` : ''}`,
+    `/api/admin/mcq-bank/facets?${withCompany(course ? `course=${encodeURIComponent(course)}` : '')}`,
   );
 
+// For a recruiter the backend files new questions under their company and
+// refuses edits to anything else; company_id just says which of theirs.
 export const upsertMcq = (q: McqQuestion) =>
-  request<{ id: string }>('POST', '/api/recruiter/mcq-bank', q);
+  request<{ id: string }>('POST', '/api/recruiter/mcq-bank', {
+    ...q,
+    company_id: currentCompanyId() || q.company_id,
+  });
 
 export const deleteMcq = (id: string) =>
-  request<unknown>('DELETE', `/api/recruiter/mcq-bank/${id}`);
+  request<unknown>('DELETE', `/api/recruiter/mcq-bank/${id}?${withCompany()}`);
 
 export const importMcq = (questions: McqQuestion[]) =>
   request<{ imported: number }>('POST', '/api/recruiter/mcq-bank/import', {
     questions,
+    company_id: currentCompanyId() || undefined,
   });
 
 // ─── Results ─────────────────────────────────────────────────────────────────
@@ -935,3 +1072,35 @@ export const deleteClass = (id: string) =>
 
 export const getClassRoster = (id: string, date: string) =>
   request<SessionRoster>('GET', `/api/admin/classes/${encodeURIComponent(id)}/attendance?date=${date}`);
+
+// ─── Online enrolments (Razorpay) ────────────────────────────────────────────
+
+export interface EnrollmentOrder {
+  id: string;
+  course_id: string;
+  course_name: string;
+  plan: 'self' | 'mentor';
+  /** Rupees. */
+  amount: number;
+  name: string;
+  email: string;
+  phone: string;
+  razorpay_order_id: string;
+  razorpay_payment_id: string;
+  /** created (checkout opened, not paid) | paid | enrolled | failed */
+  status: string;
+  new_account: boolean;
+  error: string;
+  created_at: string;
+  paid_at: string | null;
+}
+
+export const listEnrollments = (page = 1, pageSize = 50, status = '', search = '') => {
+  const p = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
+  if (status) p.set('status', status);
+  if (search) p.set('search', search);
+  return request<{ orders: EnrollmentOrder[]; total: number; revenue: number; enabled: boolean; test_mode: boolean }>(
+    'GET',
+    `/api/admin/enrollments?${p}`,
+  );
+};

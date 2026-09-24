@@ -4,6 +4,7 @@ import Confirm from '../../components/Confirm';
 import McqForm from './McqForm';
 import McqImport from './McqImport';
 import { useToast } from '../../components/Toast';
+import { useCompany } from '../../lib/company';
 import {
   listMcq,
   deleteMcq,
@@ -14,6 +15,7 @@ import {
 } from '../../lib/api';
 import { courseName, useCourses } from '../../lib/courses';
 import { useUrlFilters } from '../../lib/useListState';
+import { useOpenOnNew } from '../../lib/useOpenOnNew';
 
 const PAGE_SIZE = 50;
 const FILTER_KEYS = ['course', 'search', 'topic', 'difficulty'] as const;
@@ -26,6 +28,8 @@ const withCount = (f: Facet) => `${f.value} (${f.count})`;
 const McqList: React.FC = () => {
   const { push } = useToast();
   const courses = useCourses();
+  // Recruiters see their company's questions plus the shared Knovate bank.
+  const { recruiter, companyId } = useCompany();
   const { filters, page, setFilter, setPage, replaceFilters } = useUrlFilters(FILTER_KEYS);
   const [items, setItems] = useState<McqQuestion[]>([]);
   const [total, setTotal] = useState(0);
@@ -34,6 +38,7 @@ const McqList: React.FC = () => {
   const [editing, setEditing] = useState<McqQuestion | null>(null);
   const [creating, setCreating] = useState(false);
   const [importing, setImporting] = useState(false);
+  useOpenOnNew(() => setCreating(true));
   const [deleting, setDeleting] = useState<McqQuestion | null>(null);
 
   // The course the admin is "inside"; '' for All. New questions go here.
@@ -52,11 +57,11 @@ const McqList: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [filters, page, push]);
+  }, [filters, page, push, companyId]);
 
   const loadFacets = useCallback(() => {
     getMcqFacets(filters.course).then(setFacets).catch(() => undefined);
-  }, [filters.course]);
+  }, [filters.course, companyId]);
 
   useEffect(() => {
     const t = setTimeout(load, 250);
@@ -177,8 +182,16 @@ const McqList: React.FC = () => {
                       <td>{q.difficulty}</td>
                       <td>{q.kind}</td>
                       <td className="actions">
-                        <button className="ghost sm" onClick={() => setEditing(q)}>Edit</button>
-                        <button className="ghost sm danger-text" onClick={() => setDeleting(q)}>Delete</button>
+                        {/* A recruiter can use the shared Knovate bank in their
+                            tests but only edit their own company's questions. */}
+                        {recruiter && !q.company_id ? (
+                          <span className="chip" title="Shared Knovate question: use it in your tests, but it can't be edited">Knovate bank</span>
+                        ) : (
+                          <>
+                            <button className="ghost sm" onClick={() => setEditing(q)}>Edit</button>
+                            <button className="ghost sm danger-text" onClick={() => setDeleting(q)}>Delete</button>
+                          </>
+                        )}
                       </td>
                     </tr>
                   ))

@@ -14,6 +14,7 @@ import {
   type SessionRoster,
 } from '../../lib/api';
 import { courseName, useCourses } from '../../lib/courses';
+import { useOpenOnNew } from '../../lib/useOpenOnNew';
 
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -39,6 +40,7 @@ const ClassList: React.FC = () => {
   const [classes, setClasses] = useState<ClassSchedule[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<ClassSchedule | 'new' | null>(null);
+  useOpenOnNew(() => setEditing('new'));
   const [deleting, setDeleting] = useState<ClassSchedule | null>(null);
   const [roster, setRoster] = useState<ClassSchedule | null>(null);
 
