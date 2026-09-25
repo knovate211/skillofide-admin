@@ -4,6 +4,7 @@ import Layout from '../../components/Layout';
 import Confirm from '../../components/Confirm';
 import QuestionPicker from './QuestionPicker';
 import DrawSettings from './DrawSettings';
+import PoolPick from './PoolPick';
 import { useToast } from '../../components/Toast';
 import {
   getAssessment,
@@ -19,6 +20,9 @@ import { courseName, useCourses } from '../../lib/courses';
 
 // One line describing where a random-draw section's questions come from.
 function drawSummary(s: Section): string {
+  if (s.kind === 'coding' || (s.questions?.length ?? 0) > 0) {
+    return `Random: ${s.pick_count} of ${s.questions?.length ?? 0} per candidate, ${s.pick_marks || 1} mark${(s.pick_marks || 1) === 1 ? '' : 's'} each`;
+  }
   const from =
     !s.pick_course ? 'any course'
     : s.pick_course === GENERAL_COURSE ? 'General questions'
@@ -44,6 +48,7 @@ const TestEditor: React.FC = () => {
   const [pickerSection, setPickerSection] = useState<Section | null>(null);
   const [deletingSection, setDeletingSection] = useState<Section | null>(null);
   const [drawSection, setDrawSection] = useState<Section | null>(null);
+  const [poolSection, setPoolSection] = useState<Section | null>(null);
 
   // new-section form
   const [secTitle, setSecTitle] = useState('');
@@ -263,6 +268,12 @@ const TestEditor: React.FC = () => {
                     {s.pick_count ? 'Random draw settings' : 'Random draw…'}
                   </button>
                 )}
+                {s.kind === 'coding' && (
+                  <button className="secondary sm" onClick={() => setPoolSection(s)}
+                    title="Give each candidate a random selection of this section's problems">
+                    {s.pick_count ? 'Random pick settings' : 'Random pick…'}
+                  </button>
+                )}
                 <button className="secondary sm" onClick={() => setPickerSection(s)}>
                   {s.kind === 'mcq' ? 'Pick questions' : 'Manage questions'}
                 </button>
@@ -299,6 +310,14 @@ const TestEditor: React.FC = () => {
         />
       )}
 
+      {poolSection && id && (
+        <PoolPick
+          assessmentId={id}
+          section={poolSection}
+          onClose={() => setPoolSection(null)}
+          onSaved={() => { setPoolSection(null); load(); }}
+        />
+      )}
       {drawSection && id && (
         <DrawSettings
           assessmentId={id}

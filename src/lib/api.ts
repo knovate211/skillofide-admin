@@ -1104,3 +1104,67 @@ export const listEnrollments = (page = 1, pageSize = 50, status = '', search = '
     `/api/admin/enrollments?${p}`,
   );
 };
+
+// ─── Integrity report ───────────────────────────────────────────────────────
+// Evidence for reviewers: a risk rating per candidate with the reasons behind
+// it, similar code between candidates, identical wrong answers, shared
+// networks, and the editor history behind code playback. Nothing here decides
+// anything — it tells a reviewer where to look.
+
+export interface IntegrityPerson {
+  attempt_id: string;
+  name: string;
+  email: string;
+}
+
+export interface IntegritySignal {
+  severity: 'high' | 'medium' | 'low';
+  text: string;
+}
+
+export interface AttemptRisk extends IntegrityPerson {
+  status: string;
+  integrity_score: number;
+  risk: 'high' | 'medium' | 'low';
+  risk_points: number;
+  signals: IntegritySignal[];
+  ips: string[];
+  sessions: number;
+}
+
+export interface SimilarPair {
+  question_title: string;
+  language: string;
+  a: IntegrityPerson;
+  b: IntegrityPerson;
+  percent: number;
+}
+
+export interface IntegrityReport {
+  attempts: AttemptRisk[];
+  similarity: SimilarPair[];
+  collusion: { a: IntegrityPerson; b: IntegrityPerson; shared_wrong: number; both_wrong: number }[];
+  shared_ips: { ip: string; people: IntegrityPerson[] }[];
+}
+
+export interface CodeSnapshot {
+  at: string;
+  language: string;
+  code: string;
+  reason: 'start' | 'edit' | 'language' | 'run' | 'submit';
+  chars_added: number;
+}
+
+export interface AttemptIntegrity {
+  risk: AttemptRisk | null;
+  sessions: { ip: string; user_agent: string; screen: string; first_seen: string; last_seen: string }[];
+  /** Keyed by attempt question id. */
+  snapshots: Record<string, CodeSnapshot[]>;
+  similarity: SimilarPair[];
+}
+
+export const getIntegrityReport = (assessmentId: string) =>
+  request<IntegrityReport>('GET', `/api/integrity/assessments/${assessmentId}`);
+
+export const getAttemptIntegrity = (attemptId: string) =>
+  request<AttemptIntegrity>('GET', `/api/integrity/attempts/${attemptId}`);

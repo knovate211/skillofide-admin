@@ -251,3 +251,58 @@ export function downloadMcqTemplate(): void {
   XLSX.utils.book_append_sheet(wb, ws, 'Questions');
   XLSX.writeFile(wb, 'mcq-import-template.xlsx');
 }
+
+// ─── Hiring candidates ──────────────────────────────────────────────────────
+// Bulk "add candidates" for a hiring test: name, email and phone per row. Any
+// header spelling the user import accepts works here too ("Full Name",
+// "Email Address", "Mobile"…). Rows are validated before anything is sent.
+
+export interface ParsedCandidate {
+  row: number;
+  name: string;
+  email: string;
+  phone: string;
+  errors: string[];
+}
+
+const CANDIDATE_HEADERS: Record<string, 'name' | 'email' | 'phone'> = {
+  name: 'name', fullname: 'name', candidate: 'name', candidatename: 'name',
+  email: 'email', emailaddress: 'email', emailid: 'email', mail: 'email',
+  phone: 'phone', phonenumber: 'phone', mobile: 'phone', mobilenumber: 'phone', contact: 'phone',
+};
+
+export async function parseCandidateFile(file: File): Promise<ParsedCandidate[]> {
+  const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+  const sheet = wb.Sheets[wb.SheetNames[0]];
+  const rows: Record<string, any>[] = XLSX.utils.sheet_to_json(sheet, { defval: '', raw: false });
+  const seen = new Set<string>();
+
+  return rows
+    .map((raw, i) => {
+      const out: ParsedCandidate = { row: i + 2, name: '', email: '', phone: '', errors: [] };
+      for (const [k, v] of Object.entries(raw)) {
+        const field = CANDIDATE_HEADERS[norm(k)];
+        if (field) out[field] = String(v ?? '').trim();
+      }
+      out.email = out.email.toLowerCase();
+      if (!out.email) out.errors.push('missing email');
+      else if (!EMAIL_RE.test(out.email)) out.errors.push('invalid email');
+      else if (seen.has(out.email)) out.errors.push('listed twice in the file');
+      if (out.email) seen.add(out.email);
+      return out;
+    })
+    // A fully blank row (common at the bottom of a sheet) is not an error.
+    .filter((r) => r.name || r.email || r.phone);
+}
+
+export function downloadCandidateTemplate(): void {
+  const ws = XLSX.utils.aoa_to_sheet([
+    ['Name', 'Email', 'Phone'],
+    ['Asha Rao', 'asha@example.com', '9876543210'],
+    ['Ravi Kumar', 'ravi@example.com', ''],
+  ]);
+  ws['!cols'] = [{ wch: 24 }, { wch: 30 }, { wch: 16 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Candidates');
+  XLSX.writeFile(wb, 'candidates-template.xlsx');
+}

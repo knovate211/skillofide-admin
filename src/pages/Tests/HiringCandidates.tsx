@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Modal from '../../components/Modal';
 import Confirm from '../../components/Confirm';
 import { useToast } from '../../components/Toast';
@@ -11,6 +11,11 @@ import {
   type CandidateInput,
   type HiringCandidate,
 } from '../../lib/api';
+import { downloadCandidateTemplate, parseCandidateFile, type ParsedCandidate } from '../../lib/excel';
+
+// The server takes at most 500 candidates per request; bigger lists are sent
+// in batches of this size.
+const BATCH = 500;
 
 // The candidates of one hiring test. The hiring team adds people here; each
 // one is emailed a personal link that signs them straight into this test —
@@ -50,6 +55,17 @@ function parseLines(text: string): { rows: CandidateInput[]; bad: string[] } {
   return { rows, bad };
 }
 
+/** SMTP errors are written for mail admins; say what they mean. */
+function friendlyEmailError(raw: string): string {
+  if (/535|Username and Password not accepted|BadCredentials|authentication failed/i.test(raw)) {
+    return 'the mail server rejected Knovate’s email login — ask your Knovate admin to update the email settings';
+  }
+  if (/not configured/i.test(raw)) return 'email is not set up on the server yet';
+  if (/5\.1\.1|does not exist|user unknown|no such user/i.test(raw)) return 'this email address does not exist';
+  if (/timeout|timed out|connection refused/i.test(raw)) return 'the mail server could not be reached — try Resend later';
+  return raw;
+}
+
 const HiringCandidates: React.FC<{ test: Assessment; onClose: () => void }> = ({ test, onClose }) => {
   const { push } = useToast();
   const [items, setItems] = useState<HiringCandidate[]>([]);
@@ -59,6 +75,11 @@ const HiringCandidates: React.FC<{ test: Assessment; onClose: () => void }> = ({
   const [busy, setBusy] = useState(false);
   const [skipped, setSkipped] = useState<{ email: string; message?: string }[]>([]);
   const [removing, setRemoving] = useState<HiringCandidate | null>(null);
+  const [mode, setMode] = useState<'paste' | 'file'>('paste');
+  const [fileRows, setFileRows] = useState<ParsedCandidate[] | null>(null);
+  const [fileName, setFileName] = useState('');
+  const [progress, setProgress] = useState('');
+  const fileInput = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
     try {
@@ -76,30 +97,67 @@ const HiringCandidates: React.FC<{ test: Assessment; onClose: () => void }> = ({
   const { rows, bad } = useMemo(() => parseLines(text), [text]);
   const published = test.status === 'published';
 
+  const existing = useMemo(() => new Set(items.map((c) => c.email.toLowerCase())), [items]);
+  const fileValid = useMemo(() => (fileRows ?? []).filter((r) => r.errors.length === 0), [fileRows]);
+  const fileBad = (fileRows?.length ?? 0) - fileValid.length;
+  const toSend: CandidateInput[] = mode === 'file'
+    ? fileValid.map((r) => ({ name: r.name, email: r.email, phone: r.phone }))
+    : rows;
+
+  const pickFile = async (f: File | undefined) => {
+    if (!f) return;
+    try {
+      const parsed = await parseCandidateFile(f);
+      setFileName(f.name);
+      setFileRows(parsed);
+      setSkipped([]);
+      if (!parsed.length) push('error', 'No candidates found. Use a sheet with Name, Email and Phone columns.');
+    } catch {
+      push('error', 'Could not read that file. Upload a .csv or .xlsx file.');
+    } finally {
+      if (fileInput.current) fileInput.current.value = '';
+    }
+  };
+
+  const clearFile = () => { setFileRows(null); setFileName(''); };
+
+  // Sends in batches, so a list of 2,000 goes through as four requests.
   const add = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!rows.length) return;
+    if (!toSend.length) return;
     setBusy(true);
     setSkipped([]);
+    let added = 0;
+    let emailOn = true;
+    const skip: { email: string; message?: string }[] = [];
     try {
       // End of the chosen day, in the recruiter's time zone.
       const expiresAt = expires ? new Date(`${expires}T23:59:59`).toISOString() : undefined;
-      const res = await addHiringCandidates(test.id!, rows, expiresAt);
-      const skip = res.results.filter((r) => r.status === 'skipped');
-      setSkipped(skip);
-      if (res.added) {
-        push('success', res.email_enabled
-          ? `${res.added} candidate${res.added === 1 ? '' : 's'} added — invitation emails are on their way`
-          : `${res.added} added, but email is not configured on the server, so no invitations were sent`);
+      for (let i = 0; i < toSend.length; i += BATCH) {
+        if (toSend.length > BATCH) setProgress(`Adding ${Math.min(i + BATCH, toSend.length)} of ${toSend.length}…`);
+        const res = await addHiringCandidates(test.id!, toSend.slice(i, i + BATCH), expiresAt);
+        added += res.added;
+        emailOn = res.email_enabled;
+        skip.push(...res.results.filter((r) => r.status === 'skipped'));
       }
-      if (!skip.length) setText('');
+    } catch (err: any) {
+      push('error', `${err.message}${added ? ` — ${added} were added before this` : ''}`);
+    } finally {
+      setSkipped(skip);
+      if (added) {
+        push('success', emailOn
+          ? `${added} candidate${added === 1 ? '' : 's'} added — invitation emails are on their way`
+          : `${added} added, but email is not configured on the server, so no invitations were sent`);
+      }
+      if (!skip.length) {
+        setText('');
+        clearFile();
+      }
+      setProgress('');
+      setBusy(false);
       // Emails go out in the background; refresh to show "Emailed" once sent.
       await load();
       setTimeout(load, 4000);
-    } catch (err: any) {
-      push('error', err.message);
-    } finally {
-      setBusy(false);
     }
   };
 
@@ -137,8 +195,71 @@ const HiringCandidates: React.FC<{ test: Assessment; onClose: () => void }> = ({
         </p>
       ) : (
         <form onSubmit={add} className="mb">
+          <div className="row between wrap mb" style={{ gap: 8 }}>
+            <strong>Add candidates</strong>
+            <div className="seg" role="tablist" aria-label="How to add candidates">
+              <button type="button" role="tab" aria-selected={mode === 'paste'} className={mode === 'paste' ? 'on' : ''} onClick={() => setMode('paste')}>Type or paste</button>
+              <button type="button" role="tab" aria-selected={mode === 'file'} className={mode === 'file' ? 'on' : ''} onClick={() => setMode('file')}>Upload file</button>
+            </div>
+          </div>
+
+          {mode === 'file' ? (
+            <div className="field">
+              <input ref={fileInput} type="file" accept=".csv,.xlsx,.xls" hidden onChange={(e) => pickFile(e.target.files?.[0])} />
+              {!fileRows ? (
+                <div
+                  className="dropzone"
+                  onClick={() => fileInput.current?.click()}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => { e.preventDefault(); pickFile(e.dataTransfer.files?.[0]); }}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') fileInput.current?.click(); }}
+                >
+                  <strong>Choose a CSV or Excel file</strong>
+                  <span className="muted small">or drag it here · columns: Name, Email, Phone (optional)</span>
+                </div>
+              ) : (
+                <div className="card card-pad">
+                  <div className="row between wrap" style={{ gap: 8 }}>
+                    <span><strong>{fileName}</strong> <span className="muted small">· {fileRows.length} row{fileRows.length === 1 ? '' : 's'}</span></span>
+                    <button type="button" className="ghost sm" onClick={clearFile}>Choose another file</button>
+                  </div>
+                  <div className="row wrap small mt" style={{ gap: 14 }}>
+                    <span className="ok-text">{fileValid.length} ready</span>
+                    {fileBad > 0 && <span className="err" style={{ fontSize: 12 }}>{fileBad} with errors (skipped)</span>}
+                    {fileValid.some((r) => existing.has(r.email)) && (
+                      <span className="muted">{fileValid.filter((r) => existing.has(r.email)).length} already invited — they get a fresh link</span>
+                    )}
+                  </div>
+                  <div className="scroll-x" style={{ maxHeight: 240, overflowY: 'auto', marginTop: 8 }}>
+                    <table className="card">
+                      <thead><tr><th>Row</th><th>Candidate</th><th>Check</th></tr></thead>
+                      <tbody>
+                        {fileRows.slice(0, 200).map((r) => (
+                          <tr key={r.row}>
+                            <td className="muted">{r.row}</td>
+                            <td>
+                              <div>{r.name || <span className="muted">(name taken from email)</span>}</div>
+                              <div className="muted small">{r.email || '—'}{r.phone ? ` · ${r.phone}` : ''}</div>
+                            </td>
+                            <td className="small nowrap">
+                              {r.errors.length
+                                ? <span className="err" style={{ fontSize: 12 }}>{r.errors.join(', ')}</span>
+                                : existing.has(r.email) ? <span className="muted">re-invite</span> : <span className="ok-text">✓</span>}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {fileRows.length > 200 && <p className="muted small">Showing the first 200 of {fileRows.length} rows.</p>}
+                  </div>
+                </div>
+              )}
+              <button type="button" className="linkBtn small mt" onClick={downloadCandidateTemplate}>Download a template (.xlsx)</button>
+            </div>
+          ) : (
           <div className="field">
-            <label>Add candidates</label>
             <textarea
               rows={5}
               value={text}
@@ -151,12 +272,13 @@ const HiringCandidates: React.FC<{ test: Assessment; onClose: () => void }> = ({
               {' '}· you can paste straight from Excel
             </span>
           </div>
+          )}
           <div className="field">
             <label>Link valid until (optional — default 7 days)</label>
             <input type="date" value={expires} onChange={(e) => setExpires(e.target.value)} />
           </div>
-          <button type="submit" disabled={busy || !rows.length}>
-            {busy ? 'Adding…' : `Add & email ${rows.length || ''} invitation${rows.length === 1 ? '' : 's'}`}
+          <button type="submit" disabled={busy || !toSend.length}>
+            {busy ? (progress || 'Adding…') : `Add & email ${toSend.length || ''} invitation${toSend.length === 1 ? '' : 's'}`}
           </button>
           <p className="muted small" style={{ marginTop: 8 }}>
             Each candidate gets an email with a personal link that opens this test directly. They
@@ -202,7 +324,7 @@ const HiringCandidates: React.FC<{ test: Assessment; onClose: () => void }> = ({
                 <div className="row small" style={{ gap: 10, marginTop: 4, alignItems: 'center' }}>
                   <span style={{ flex: 1 }} className={c.email_error ? '' : 'muted'}>
                     {c.email_error
-                      ? <span style={{ color: 'var(--danger)' }}>Email not sent: {c.email_error}</span>
+                      ? <span style={{ color: 'var(--danger)' }} title={c.email_error}>Email not sent: {friendlyEmailError(c.email_error)}</span>
                       : c.emailed_at
                         ? `Emailed ${new Date(c.emailed_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}`
                         : 'Sending email…'}

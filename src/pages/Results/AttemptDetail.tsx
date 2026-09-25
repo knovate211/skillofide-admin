@@ -3,11 +3,17 @@ import { useNavigate, useParams } from 'react-router-dom';
 import Layout from '../../components/Layout';
 import { useToast } from '../../components/Toast';
 import {
+  getAssessment,
   getAttemptReport,
+  getAttemptIntegrity,
   gradeAnswer,
+  type AttemptIntegrity,
   type AttemptReport,
   type ReportQuestion,
 } from '../../lib/api';
+import CodePlayback from './CodePlayback';
+import { RiskBadge } from './IntegrityPanel';
+import { fmtDuration, ranOutOfTime, secondsTaken } from '../../lib/duration';
 
 const secs = (ms: number) => {
   const s = Math.round(ms / 1000);
@@ -61,11 +67,15 @@ const AttemptDetail: React.FC = () => {
   const navigate = useNavigate();
   const [report, setReport] = useState<AttemptReport | null>(null);
   const [onlyUngraded, setOnlyUngraded] = useState(false);
+  const [integrity, setIntegrity] = useState<AttemptIntegrity | null>(null);
+  const [limitMin, setLimitMin] = useState<number | undefined>();
 
   const load = useCallback(async () => {
     if (!attemptId) return;
     try {
       setReport(await getAttemptReport(attemptId));
+      getAttemptIntegrity(attemptId).then(setIntegrity).catch(() => setIntegrity(null));
+      if (id) getAssessment(id).then((t) => setLimitMin(t.duration_minutes)).catch(() => undefined);
     } catch (e: any) {
       push('error', e.message);
     }
@@ -97,6 +107,9 @@ const AttemptDetail: React.FC = () => {
   const pending = questions.filter(needsGrade).length;
   const shown = onlyUngraded ? questions.filter(needsGrade) : questions;
   const totalTime = questions.reduce((t, q) => t + (q.time_spent_ms || 0), 0);
+  const taken = secondsTaken(s.started_at, s.submitted_at);
+  const timeBy = (kind: ReportQuestion['kind']) =>
+    questions.filter((q) => q.kind === kind).reduce((t, q) => t + (q.time_spent_ms || 0), 0);
   const events = report.proctor_events || [];
 
   return (
@@ -115,9 +128,25 @@ const AttemptDetail: React.FC = () => {
           <div className="l">Integrity score</div>
           <div className="hint">{events.length} proctoring event{events.length === 1 ? '' : 's'}</div>
         </div>
+        <div className={`card tile${taken != null && ranOutOfTime(taken, limitMin) ? ' alert' : ''}`}>
+          <div className="n">{taken != null ? fmtDuration(taken) : '—'}</div>
+          <div className="l">Time taken{limitMin ? ` · of ${limitMin} min` : ''}</div>
+          <div className="hint">
+            {taken == null ? 'Still in progress'
+              : ranOutOfTime(taken, limitMin) ? 'Ran out of time — the timer submitted it'
+              : limitMin ? `Finished with ${fmtDuration(limitMin * 60 - taken)} to spare` : 'Start to submit'}
+          </div>
+        </div>
         <div className="card tile">
           <div className="n">{secs(totalTime)}</div>
           <div className="l">Time on questions</div>
+          <div className="hint">
+            {[['mcq', 'MCQ'], ['coding', 'coding'], ['descriptive', 'written']]
+              .map(([k, label]) => [label, timeBy(k as ReportQuestion['kind'])] as const)
+              .filter(([, ms]) => ms > 0)
+              .map(([label, ms]) => `${secs(ms)} ${label}`)
+              .join(' · ') || 'Not recorded'}
+          </div>
         </div>
         <div className={`card tile${pending > 0 ? ' alert' : ''}`}>
           <div className="n">{pending}</div>
@@ -129,6 +158,57 @@ const AttemptDetail: React.FC = () => {
         {s.user_email} · attempt #{s.attempt_no ?? 1} · <span className="badge draft">{s.status}</span>
         {s.submitted_at && ` · submitted ${new Date(s.submitted_at).toLocaleString()}`}
       </p>
+
+      {integrity?.risk && (
+        <div className="card card-pad mb">
+          <div className="row between wrap" style={{ gap: 8 }}>
+            <h3 style={{ margin: 0 }}>Integrity</h3>
+            <RiskBadge risk={integrity.risk.risk} />
+          </div>
+          {integrity.risk.signals.length === 0 ? (
+            <p className="muted" style={{ marginBottom: 0 }}>No integrity signals for this candidate.</p>
+          ) : (
+            <ul className="signals mt">
+              {integrity.risk.signals.map((sg, i) => <li key={i} className={`sig-${sg.severity}`}>{sg.text}</li>)}
+            </ul>
+          )}
+          {integrity.similarity.length > 0 && (
+            <p className="small mt" style={{ marginBottom: 0 }}>
+              Similar code:{' '}
+              {integrity.similarity.map((p, i) => {
+                const other = p.a.attempt_id === attemptId ? p.b : p.a;
+                return (
+                  <React.Fragment key={i}>
+                    {i > 0 && ' · '}
+                    <button className="linkBtn" onClick={() => navigate(`/tests/${id}/results/${other.attempt_id}`)}>
+                      {other.name || other.email}
+                    </button>{' '}({p.percent}% on “{p.question_title}”)
+                  </React.Fragment>
+                );
+              })}
+            </p>
+          )}
+          {integrity.sessions.length > 0 && (
+            <details className="mt">
+              <summary className="small">Devices and networks ({integrity.sessions.length} session{integrity.sessions.length === 1 ? '' : 's'})</summary>
+              <table className="card mt">
+                <thead><tr><th>IP</th><th>Browser</th><th>Screen</th><th>From</th><th>Last seen</th></tr></thead>
+                <tbody>
+                  {integrity.sessions.map((se, i) => (
+                    <tr key={i}>
+                      <td className="nowrap">{se.ip || '—'}</td>
+                      <td className="small" style={{ maxWidth: 320 }}>{se.user_agent || '—'}</td>
+                      <td className="nowrap">{se.screen || '—'}</td>
+                      <td className="muted nowrap">{new Date(se.first_seen).toLocaleTimeString()}</td>
+                      <td className="muted nowrap">{new Date(se.last_seen).toLocaleTimeString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </details>
+          )}
+        </div>
+      )}
 
       <div className="row between mb">
         <h3>Answers</h3>
@@ -187,8 +267,11 @@ const AttemptDetail: React.FC = () => {
             {q.kind === 'coding' && (
               q.code ? (
                 <>
-                  <div className="muted small">{q.language}</div>
+                  <div className="muted small">{q.language} · final answer</div>
                   <pre className="answer-text code">{q.code}</pre>
+                  {integrity && (
+                    <CodePlayback snapshots={integrity.snapshots[q.id] || []} events={events} />
+                  )}
                 </>
               ) : <p className="muted">No code submitted.</p>
             )}
