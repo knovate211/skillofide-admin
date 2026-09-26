@@ -428,7 +428,7 @@ export interface Assessment {
   company_name?: string;
   title: string;
   description?: string;
-  purpose?: string; // practice | hiring | scholarship
+  purpose?: string; // practice | hiring | scholarship | certification
   duration_minutes: number;
   total_marks?: number;
   passing_marks?: number;
@@ -1168,3 +1168,359 @@ export const getIntegrityReport = (assessmentId: string) =>
 
 export const getAttemptIntegrity = (attemptId: string) =>
   request<AttemptIntegrity>('GET', `/api/integrity/attempts/${attemptId}`);
+
+// ─── Paid certification exams ────────────────────────────────────────────────
+// Two screens sit on these: the catalogue of exams on offer, and the people who
+// have paid for one. A registration is a purchase first and an attempt second,
+// so money (refunds) and the credential (issue/revoke) are recorded by hand —
+// the attempt only produces the score behind those decisions.
+
+export interface CertificationExam {
+  id: string;
+  /** Stable public key; the marketing site links to the exam by this. */
+  slug: string;
+  title: string;
+  course_id: string;
+  assessment_id: string;
+  assessment_title: string;
+  /** 'missing' when the mapped paper no longer exists. */
+  assessment_status: string;
+  price_rupees: number;
+  pass_percent: number;
+  /** How long the link issued on payment stays usable. */
+  link_valid_days: number;
+  /** Cooling-off period before a failed candidate may buy another sitting. */
+  resit_wait_days: number;
+  summary: string;
+  is_active: boolean;
+  opens_at?: string;
+  closes_at?: string;
+  registrations: number;
+  passed: number;
+}
+
+export interface CertificationExamInput {
+  slug: string;
+  title: string;
+  course_id: string;
+  assessment_id: string;
+  price_rupees: number;
+  pass_percent: number;
+  link_valid_days: number;
+  resit_wait_days: number;
+  summary: string;
+  is_active: boolean;
+  opens_at: string;
+  closes_at: string;
+}
+
+export const listCertificationExams = () =>
+  request<{ exams: CertificationExam[] }>('GET', '/api/admin/certification-exams');
+
+/**
+ * Creates or updates the exam with this slug.
+ *
+ * The slug is the key, so changing it produces a second exam rather than
+ * renaming the first — which is why the form locks it once saved. The paper
+ * must have purpose 'certification'; anything else is refused with a 400
+ * explaining why, and `warning` carries the softer problems (an unpublished
+ * paper, say) that are worth saying but not worth blocking on.
+ */
+export const upsertCertificationExam = (e: CertificationExamInput) =>
+  request<{ success: boolean; id: string; warning?: string }>(
+    'POST',
+    '/api/admin/certification-exams',
+    e,
+  );
+
+/** Refused with a 409 once anyone has registered — paid history is not deletable. */
+export const deleteCertificationExam = (id: string) =>
+  request<{ success: boolean }>('DELETE', `/api/admin/certification-exams/${id}`);
+
+export interface CertificationRegistration {
+  id: string;
+  exam_title: string;
+  exam_slug: string;
+  name: string;
+  email: string;
+  phone: string;
+  /** created | paid | started | submitted | passed | failed | expired | refunded */
+  status: string;
+  amount_rupees: number;
+  payment_id: string;
+  created_at: string;
+  paid_at?: string;
+  /** When the exam link stops working. */
+  expires_at?: string;
+  claimed_at?: string;
+  emailed: boolean;
+  attempt_id?: string;
+  attempt_status?: string;
+  score_percent?: number;
+  /** Copied from the exam as it stood at purchase, so an old row reads correctly. */
+  pass_percent: number;
+  integrity_score?: number;
+  credential_id?: string;
+  credential_revoked: boolean;
+  /** Set when the payment went through but issuing the link did not. */
+  error?: string;
+  notes?: string;
+}
+
+export interface CertificationFilters {
+  status?: string;
+  /** An exam slug. */
+  exam?: string;
+  search?: string;
+}
+
+export interface ListCertificationsResponse {
+  registrations: CertificationRegistration[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export const listCertifications = (page = 1, pageSize = 25, f: CertificationFilters = {}) => {
+  const q = new URLSearchParams({ page: String(page), pageSize: String(pageSize), ...cleanFilters(f) });
+  return request<ListCertificationsResponse>('GET', `/api/admin/certifications?${q}`);
+};
+
+export const exportCertificationsCsv = (f: CertificationFilters = {}) =>
+  downloadAuthed(
+    `/api/admin/certifications/export.csv?${new URLSearchParams(cleanFilters(f))}`,
+    `certifications-${new Date().toISOString().slice(0, 10)}.csv`,
+  );
+
+/**
+ * Records a note, or one of the decisions only a person can make.
+ *
+ * `refund` books the refund against the registration — it does not move money;
+ * that happens in the payment dashboard. Issuing and revoking the credential
+ * are likewise deliberate: passing the paper is evidence, not the certificate.
+ */
+export const updateCertification = (
+  id: string,
+  patch: {
+    notes?: string;
+    action?: 'refund' | 'issue_certificate' | 'revoke_certificate';
+    reason?: string;
+  },
+) => request<{ success: boolean; credential_id?: string }>('PATCH', `/api/admin/certifications/${id}`, patch);
+
+export interface CertificationResend {
+  success: boolean;
+  email: string;
+  /** The freshly issued link. Shown to staff so a bouncing mailbox is not a dead end. */
+  url: string;
+  expires_at: string;
+}
+
+/** Issues a new link and emails it; the previous one stops working. */
+export const resendCertificationLink = (id: string) =>
+  request<CertificationResend>('POST', `/api/admin/certifications/${id}/resend`);
+
+/** Pushes the deadline out without reissuing the link the candidate already has. */
+export const extendCertification = (id: string, days: number) =>
+  request<{ success: boolean; expires_at: string }>(
+    'POST',
+    `/api/admin/certifications/${id}/extend`,
+    { days },
+  );
+
+// ─── Referral programme ──────────────────────────────────────────────────────
+// Three screens sit on these: the offer itself (what a referral pays and what
+// the friend saves), the people doing the referring, and the rewards they have
+// earned. A reward is money leaving the business, so nothing here is automatic:
+// staff approve it, then record the payout reference once it has actually been
+// sent. `flags` is the backend's way of saying "look at this one first".
+
+/**
+ * The offer as it stands today.
+ *
+ * Every amount is in paise — the same unit the payment provider uses, so a
+ * reward can never drift by a rounding of rupees. The screens divide by 100 on
+ * the way in and multiply on the way out.
+ */
+export interface ReferralProgram {
+  is_active: boolean;
+  course_reward_paise: number;
+  exam_reward_paise: number;
+  friend_discount_percent: number;
+  friend_discount_cap_paise: number;
+  min_order_paise: number;
+  /** Most one referrer can earn in a calendar month; 0 for no ceiling. */
+  monthly_cap_paise: number;
+  /** How long after a click a purchase still counts as that referral's. */
+  attribution_days: number;
+  terms_url: string;
+}
+
+export const getReferralProgram = () =>
+  request<ReferralProgram>('GET', '/api/admin/referral-program');
+
+/** Saves the whole offer — changes apply to new referrals, not earned rewards. */
+export const saveReferralProgram = (p: ReferralProgram) =>
+  request<{ success?: boolean }>('POST', '/api/admin/referral-program', p);
+
+export interface Referrer {
+  id: string;
+  /** The code they share; every referral is attributed through it. */
+  code: string;
+  name: string;
+  email: string;
+  phone: string;
+  /** Where a payout is sent. Without it nothing can be paid. */
+  upi_id: string;
+  pan: string;
+  is_blocked: boolean;
+  notes: string;
+  created_at: string;
+  clicks: number;
+  conversions: number;
+  earned_rupees: number;
+  paid_rupees: number;
+  pending_rupees: number;
+}
+
+export interface ListReferrersResponse {
+  referrers: Referrer[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export const listReferrers = (page = 1, pageSize = 25, search = '') => {
+  const q = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+  if (search) q.set('search', search);
+  return request<ListReferrersResponse>('GET', `/api/admin/referrers?${q}`);
+};
+
+/**
+ * Updates only the fields passed.
+ *
+ * Blocking stops new referrals being credited; it does not claw back rewards
+ * already earned, which is why it is separate from rejecting them.
+ */
+export const updateReferrer = (
+  id: string,
+  patch: { upi_id?: string; pan?: string; notes?: string; is_blocked?: boolean },
+) => request<{ success: boolean }>('PATCH', `/api/admin/referrers/${id}`, patch);
+
+export interface Referral {
+  id: string;
+  code: string;
+  referrer_name: string;
+  referrer_email: string;
+  /** Repeated on the reward so the payout run does not need the referrer list. */
+  referrer_upi: string;
+  friend_name: string;
+  friend_email: string;
+  /** course | certification */
+  kind: string;
+  item_name: string;
+  order_rupees: number;
+  discount_rupees: number;
+  reward_rupees: number;
+  /** pending | approved | paid | rejected | reversed */
+  status: string;
+  /** Why the backend thinks a human should look: self-referral, duplicates, … */
+  flags: string;
+  /** The reason recorded when it was rejected. */
+  reason: string;
+  approved_by: string;
+  /** UTR or transaction id captured when the money was sent. */
+  payout_ref: string;
+  created_at: string;
+  paid_at?: string;
+}
+
+export interface ReferralFilters {
+  status?: string;
+  kind?: string;
+  /** A referrer's code — how the referrer list deep-links into this screen. */
+  code?: string;
+  /** 'true' to show only the rewards the backend has flagged. */
+  flagged?: string;
+  search?: string;
+}
+
+export interface ListReferralsResponse {
+  referrals: Referral[];
+  total: number;
+  page: number;
+  pageSize: number;
+  /** Approved but unpaid, across everything matching the filters — not just this page. */
+  owedRupees: number;
+}
+
+export const listReferrals = (page = 1, pageSize = 25, f: ReferralFilters = {}) => {
+  const q = new URLSearchParams({ page: String(page), pageSize: String(pageSize), ...cleanFilters(f) });
+  return request<ListReferralsResponse>('GET', `/api/admin/referrals?${q}`);
+};
+
+/** The payout sheet: the same rows the screen is filtered to, with UPI ids. */
+export const exportReferralsCsv = (f: ReferralFilters = {}) =>
+  downloadAuthed(
+    `/api/admin/referrals/export.csv?${new URLSearchParams(cleanFilters(f))}`,
+    `referral-payouts-${new Date().toISOString().slice(0, 10)}.csv`,
+  );
+
+/** approve → owed, pay → sent, reject → never owed, reopen → back to pending. */
+export type ReferralAction = 'approve' | 'reject' | 'pay' | 'reopen';
+
+/**
+ * Moves one reward along.
+ *
+ * The backend guards the order — only a pending reward can be approved and only
+ * an approved one can be paid — so the buttons mirror that rather than relying
+ * on it. A rejection must carry a reason and a payout must carry its reference:
+ * both are what somebody is asked about months later.
+ */
+export const updateReferral = (
+  id: string,
+  patch: { action: ReferralAction; reason?: string; payout_ref?: string },
+) => request<{ success: boolean }>('PATCH', `/api/admin/referrals/${id}`, patch);
+
+/**
+ * The same three moves over a selection — this is the weekly payout run.
+ *
+ * Ids only: there is no "all matching" mode here, because paying rows nobody
+ * has looked at is exactly what the flags exist to prevent.
+ */
+export const bulkReferrals = (
+  ids: string[],
+  action: 'approve' | 'reject' | 'pay',
+  opts: { reason?: string; payout_ref?: string } = {},
+) => request<{ success: boolean; updated: number }>('POST', '/api/admin/referrals/bulk', {
+  ids,
+  action,
+  ...opts,
+});
+
+// ─── Password reset (public) ─────────────────────────────────────────────────
+//
+// Both endpoints are deliberately unauthenticated: somebody locked out cannot
+// present a token to ask for a way back in. The server answers identically for
+// a known and an unknown address, so the UI must never report "no such user".
+
+export const requestPasswordReset = async (email: string): Promise<{ code_required: boolean }> => {
+  const resp = await fetch('/api/password-reset/request', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok) throw new Error(data.error || 'Could not start the reset.');
+  return { code_required: data.code_required !== false };
+};
+
+export const confirmPasswordReset = async (email: string, code: string, newPassword: string): Promise<void> => {
+  const resp = await fetch('/api/password-reset/confirm', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, code, new_password: newPassword }),
+  });
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok) throw new Error(data.error || 'Could not update the password.');
+};

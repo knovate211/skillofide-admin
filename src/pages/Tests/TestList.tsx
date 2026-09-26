@@ -22,14 +22,20 @@ import { courseName, useCourses } from '../../lib/courses';
 import { useCompany } from '../../lib/company';
 
 // Scholarship papers are invite-only (the scholarship funnel issues the
-// invite), practice tests are open to enrolled students, and hiring tests
-// belong to a company and are invite-only (invites are created here).
+// invite), practice tests are open to enrolled students, hiring tests belong
+// to a company and are invite-only (invites are created here), and
+// certification papers are invite-only too — the invite is issued on payment.
 const TYPES = [
   { value: 'practice', label: 'Practice tests' },
   { value: 'scholarship', label: 'Scholarship tests' },
+  { value: 'certification', label: 'Certification papers' },
   { value: 'hiring', label: 'Hiring tests' },
 ] as const;
 type Purpose = (typeof TYPES)[number]['value'];
+
+// 'practice' is the default tab, so it is the one the URL leaves out.
+const asPurpose = (v: string): Purpose =>
+  TYPES.some((t) => t.value === v && t.value !== 'practice') ? (v as Purpose) : 'practice';
 const TYPE_KEYS = ['type'] as const;
 
 const TestList: React.FC = () => {
@@ -54,12 +60,10 @@ const TestList: React.FC = () => {
   const [duplicating, setDuplicating] = useState<Assessment | null>(null);
   const [copyTitle, setCopyTitle] = useState('');
   const { filters, setFilter } = useUrlFilters(TYPE_KEYS);
-  useOpenOnNew(() => { setNewPurpose(filters.type === 'scholarship' || filters.type === 'hiring' ? filters.type : 'practice'); setCreating(true); });
+  useOpenOnNew(() => { setNewPurpose(asPurpose(filters.type)); setCreating(true); });
   // A recruiter only ever sees their own company's hiring tests.
   const { recruiter, companyId, company } = useCompany();
-  const purpose: Purpose = recruiter
-    ? 'hiring'
-    : filters.type === 'scholarship' || filters.type === 'hiring' ? filters.type : 'practice';
+  const purpose: Purpose = recruiter ? 'hiring' : asPurpose(filters.type);
 
   const loadCompanies = useCallback(async () => {
     try {
@@ -185,7 +189,7 @@ const TestList: React.FC = () => {
     }
   };
 
-  const cols = purpose === 'scholarship' || recruiter ? 6 : 7;
+  const cols = purpose === 'practice' || (purpose === 'hiring' && !recruiter) ? 7 : 6;
 
   return (
     <Layout
@@ -212,6 +216,11 @@ const TestList: React.FC = () => {
         {purpose === 'scholarship' && (
           <span className="muted small">
             To open a scholarship for a course: duplicate a paper, rename it, publish it, then attach it under Scholarship Programmes.
+          </span>
+        )}
+        {purpose === 'certification' && (
+          <span className="muted small">
+            Build and publish the paper here, then price it under Cert Exams. Candidates are emailed a link once they pay.
           </span>
         )}
         {purpose === 'hiring' && (
@@ -280,6 +289,7 @@ const TestList: React.FC = () => {
               <select value={newPurpose} onChange={(e) => setNewPurpose(e.target.value as Purpose)}>
                 <option value="practice">Practice test — for enrolled students</option>
                 <option value="scholarship">Scholarship test — invite-only, used by Scholarship Programmes</option>
+                <option value="certification">Certification paper — invite-only, sold under Cert Exams</option>
                 <option value="hiring">Hiring test — for a company, invite-only</option>
               </select>
             </div>

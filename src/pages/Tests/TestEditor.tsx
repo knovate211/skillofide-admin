@@ -237,6 +237,9 @@ const TestEditor: React.FC = () => {
         {a.purpose === 'scholarship' && (
           <p className="muted small mb">Scholarship tests are invite-only: candidates reach them through the scholarship application, not the practice list.</p>
         )}
+        {a.purpose === 'certification' && (
+          <p className="muted small mb">Certification paper. It is invite-only and paid for: publish it, then attach it to an exam under Cert Exams, which prices it and issues each buyer a link.</p>
+        )}
         {a.purpose === 'hiring' && (
           <p className="muted small mb">
             Hiring test{a.company_name ? ` for ${a.company_name}` : ''}. It is invite-only: once it is published, add candidates with Candidates on the tests list and each is emailed a link.

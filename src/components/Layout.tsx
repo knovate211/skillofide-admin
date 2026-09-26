@@ -5,8 +5,8 @@ import { resetCompany, retryCompany, setCompany, useCompany } from '../lib/compa
 import { useAlerts } from '../lib/alerts';
 import {
   IconAward, IconBell, IconBuilding, IconCalendar, IconChevronDown, IconClipboard, IconCode, IconFile,
-  IconHome, IconLayers, IconLogout, IconMenu, IconMessage, IconSearch, IconShield, IconUserCheck,
-  IconUserPlus, IconUsers,
+  IconCap, IconGift, IconHome, IconLayers, IconLogout, IconMenu, IconMessage, IconSearch, IconShield,
+  IconSliders, IconStar, IconUserCheck, IconUserPlus, IconUsers,
 } from './Icons';
 
 // Grouped by the job an admin is doing, so related screens sit together and a
@@ -39,6 +39,21 @@ const groups: NavGroup[] = [
       { to: '/enquiries', label: 'Enquiries', icon: IconMessage },
       { to: '/scholarship', label: 'Applications', icon: IconFile },
       { to: '/scholarship/programmes', label: 'Scholarship Programmes', icon: IconAward },
+    ],
+  },
+  {
+    heading: 'Certification',
+    links: [
+      { to: '/certifications', label: 'Certifications', icon: IconCap },
+      { to: '/certifications/exams', label: 'Cert Exams', icon: IconStar },
+    ],
+  },
+  {
+    heading: 'Referrals',
+    links: [
+      { to: '/referrals', label: 'Rewards', icon: IconGift },
+      { to: '/referrals/referrers', label: 'Referrers', icon: IconUsers },
+      { to: '/referrals/settings', label: 'Programme', icon: IconSliders },
     ],
   },
   {

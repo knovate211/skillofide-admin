@@ -43,4 +43,6 @@ export const IconStar = make(<><path d="m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 1
 export const IconZap = make(<><path d="M13 2.5 4.5 13.5H12l-1 8 8.5-11H12l1-8Z" /></>);
 export const IconClock = make(<><circle cx="12" cy="12" r="8.5" /><path d="M12 7.5V12l3 2" /></>);
 export const IconHelp = make(<><circle cx="12" cy="12" r="8.5" /><path d="M9.6 9.5a2.5 2.5 0 0 1 4.9.7c0 1.6-2.5 2.2-2.5 3.8M12 17h.01" /></>);
+export const IconGift = make(<><rect x="3.5" y="9.5" width="17" height="11" rx="1.5" /><path d="M3.5 13.5h17M12 9.5v11" /><path d="M12 9.5S10.8 4 8.5 4a2.2 2.2 0 0 0 0 5.5H12Zm0 0s1.2-5.5 3.5-5.5a2.2 2.2 0 0 1 0 5.5H12Z" /></>);
+export const IconSliders = make(<><path d="M5 20v-6M5 10V4M12 20v-9M12 7V4M19 20v-4M19 12V4" /><path d="M3 14h4M10 7h4M17 16h4" /></>);
 export const IconRefresh = make(<><path d="M20 11a8 8 0 0 0-14.3-4.8L4 8M4 4v4h4M4 13a8 8 0 0 0 14.3 4.8L20 16M20 20v-4h-4" /></>);

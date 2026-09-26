@@ -484,3 +484,238 @@ details > summary { cursor: pointer; color: var(--accent-strong); font-weight: 6
 .dropzone { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 26px 16px; text-align: center;
   border: 2px dashed #dcd2c1; border-radius: 12px; background: #fffdf9; cursor: pointer; }
 .dropzone:hover, .dropzone:focus-visible { border-color: var(--accent); background: #fbf4e8; outline: none; }
+
+/* ─── Sign-in screen ──────────────────────────────────────────────────────────
+   A split screen: the product's own story on the left, the form on the right.
+   Below 900px the brand panel is dropped rather than stacked — on a phone the
+   only thing that matters is signing in. */
+.login-screen {
+  min-height: 100%;
+  display: grid;
+  grid-template-columns: 1.05fr 0.95fr;
+  background: var(--surface);
+}
+@media (max-width: 900px) {
+  .login-screen { grid-template-columns: 1fr; }
+  .login-brand { display: none; }
+}
+
+.login-brand {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding: 44px 48px;
+  overflow: hidden;
+  background: linear-gradient(150deg, #faf7f1 0%, #f4efe5 55%, #f7f3ec 100%);
+}
+/* Two soft shapes, echoing the marketing site's hero without repeating it. */
+.login-brand::before,
+.login-brand::after {
+  content: "";
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+}
+.login-brand::before {
+  width: 420px; height: 420px; top: -150px; right: -120px;
+  background: radial-gradient(circle at 30% 30%, rgba(201,138,58,.16), transparent 70%);
+}
+.login-brand::after {
+  width: 320px; height: 320px; bottom: -120px; left: -90px;
+  background: radial-gradient(circle at 60% 40%, rgba(201,138,58,.10), transparent 70%);
+}
+.login-brand > * { position: relative; z-index: 1; }
+
+.login-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -.02em;
+  color: var(--text);
+}
+.login-sub {
+  display: block;
+  margin-top: 2px;
+  margin-left: 44px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.login-brand-copy h1 {
+  margin: 0;
+  font-size: clamp(28px, 3.2vw, 40px);
+  line-height: 1.1;
+  letter-spacing: -.02em;
+}
+.login-brand-copy h1 em { font-style: normal; color: var(--accent-strong); }
+.login-brand-copy p {
+  margin: 12px 0 0;
+  max-width: 44ch;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.login-brand-foot {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.login-brand-foot svg { color: var(--accent); }
+.login-brand-foot span { color: var(--border); }
+
+/* ── The panel preview ── */
+.login-art {
+  /* Sits between the copy and the footer, taking the space that is left rather
+     than pushing the footer off a short screen. */
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  margin: 4px 0;
+}
+.login-art img {
+  width: 100%;
+  max-width: 620px;
+  height: 100%;
+  max-height: 420px;
+  object-fit: contain;
+  object-position: left center;
+}
+
+/* ── The card ── */
+.login-panel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 24px;
+  background: var(--bg);
+}
+.login-card {
+  width: 100%;
+  max-width: 412px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 36px 34px;
+  box-shadow: 0 24px 60px -32px rgba(43,38,32,.4);
+}
+.login-card-logo { justify-content: center; width: 100%; font-size: 23px; }
+.login-card h2 {
+  margin: 18px 0 4px;
+  font-size: 25px;
+  text-align: center;
+  letter-spacing: -.01em;
+}
+.login-card-sub {
+  margin: 0 0 24px;
+  text-align: center;
+  font-size: 13.5px;
+  color: var(--text-secondary);
+}
+
+.login-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.login-input {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin-bottom: 16px;
+}
+.login-input-icon {
+  position: absolute;
+  left: 13px;
+  display: flex;
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+.login-input input {
+  width: 100%;
+  padding: 11px 13px 11px 40px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  font: inherit;
+  color: var(--text);
+}
+.login-input input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(201,138,58,.18);
+}
+.login-input-toggle {
+  position: absolute;
+  right: 6px;
+  display: flex;
+  padding: 6px;
+  background: none;
+  color: var(--text-secondary);
+  border-radius: 8px;
+}
+.login-input-toggle:hover { background: var(--bg); color: var(--text); }
+
+.login-submit {
+  width: 100%;
+  margin-top: 4px;
+  padding: 12px 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  font-size: 15px;
+}
+
+.login-or {
+  position: relative;
+  margin: 22px 0 14px;
+  text-align: center;
+}
+.login-or::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--border);
+}
+.login-or span {
+  position: relative;
+  padding: 0 12px;
+  background: var(--surface);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  color: var(--text-secondary);
+}
+
+.login-link {
+  display: block;
+  width: 100%;
+  background: none;
+  color: var(--accent-strong);
+  font-weight: 600;
+  padding: 4px;
+}
+.login-link:hover { background: none; text-decoration: underline; }
+
+.login-reset { display: flex; flex-direction: column; gap: 9px; }
+.login-reset p { margin: 0; font-size: 13px; }
+.login-reset-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font: inherit;
+}
+.login-reset-actions { display: flex; justify-content: flex-end; gap: 8px; }

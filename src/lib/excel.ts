@@ -1,7 +1,11 @@
 // Excel/CSV parsing for the bulk-user import, built on SheetJS.
-import * as XLSX from 'xlsx';
 import { resolveCourseId, COURSES } from './courses';
 import type { ImportUserRow } from './api';
+
+// SheetJS is about 430 KB and only needed when a file is read or written, so it
+// is fetched then rather than shipped with every screen that can open an
+// import dialog (the tests list among them).
+const loadXLSX = () => import('xlsx');
 
 export interface ParsedRow {
   row: number; // 1-based row number in the sheet (excludes header)
@@ -46,6 +50,7 @@ function genPassword(): string {
 }
 
 export async function parseFile(file: File): Promise<ParsedRow[]> {
+  const XLSX = await loadXLSX();
   const buf = await file.arrayBuffer();
   const wb = XLSX.read(buf, { type: 'array' });
   const sheet = wb.Sheets[wb.SheetNames[0]];
@@ -121,7 +126,8 @@ export function toImportRows(rows: ParsedRow[]): ImportUserRow[] {
 
 // Builds a downloadable .xlsx template with the expected headers, an example row,
 // and a second sheet listing valid course ids/names.
-export function downloadTemplate(): void {
+export async function downloadTemplate(): Promise<void> {
+  const XLSX = await loadXLSX();
   const headers = ['name', 'email', 'phone', 'password', 'role', 'courses'];
   const example = [
     'Jane Doe',
@@ -146,7 +152,8 @@ export function downloadTemplate(): void {
 // Download an email→password sheet so the admin can hand out temporary
 // credentials after a bulk import (passwords are hashed server-side and cannot
 // be recovered later).
-export function downloadCredentials(rows: ParsedRow[]): void {
+export async function downloadCredentials(rows: ParsedRow[]): Promise<void> {
+  const XLSX = await loadXLSX();
   const data = [
     ['name', 'email', 'password', 'role'],
     ...rows.map((r) => [r.name, r.email, r.password, r.role]),
@@ -185,6 +192,7 @@ const MCQ_HEADER: Record<string, string> = {
 };
 
 export async function parseMcqFile(file: File): Promise<ParsedMcq[]> {
+  const XLSX = await loadXLSX();
   const buf = await file.arrayBuffer();
   const wb = XLSX.read(buf, { type: 'array' });
   const sheet = wb.Sheets[wb.SheetNames[0]];
@@ -243,7 +251,8 @@ export async function parseMcqFile(file: File): Promise<ParsedMcq[]> {
   });
 }
 
-export function downloadMcqTemplate(): void {
+export async function downloadMcqTemplate(): Promise<void> {
+  const XLSX = await loadXLSX();
   const headers = ['question', 'option1', 'option2', 'option3', 'option4', 'correct', 'topic', 'difficulty', 'type', 'explanation'];
   const example = ['What is 2+2?', '3', '4', '5', '6', '2', 'Math', 'Easy', 'single', 'Basic arithmetic'];
   const ws = XLSX.utils.aoa_to_sheet([headers, example]);
@@ -272,6 +281,7 @@ const CANDIDATE_HEADERS: Record<string, 'name' | 'email' | 'phone'> = {
 };
 
 export async function parseCandidateFile(file: File): Promise<ParsedCandidate[]> {
+  const XLSX = await loadXLSX();
   const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
   const sheet = wb.Sheets[wb.SheetNames[0]];
   const rows: Record<string, any>[] = XLSX.utils.sheet_to_json(sheet, { defval: '', raw: false });
@@ -295,7 +305,8 @@ export async function parseCandidateFile(file: File): Promise<ParsedCandidate[]>
     .filter((r) => r.name || r.email || r.phone);
 }
 
-export function downloadCandidateTemplate(): void {
+export async function downloadCandidateTemplate(): Promise<void> {
+  const XLSX = await loadXLSX();
   const ws = XLSX.utils.aoa_to_sheet([
     ['Name', 'Email', 'Phone'],
     ['Asha Rao', 'asha@example.com', '9876543210'],
