@@ -54,11 +54,11 @@ const EnrollmentList: React.FC = () => {
       {mode && !mode.enabled && (
         <div className="notice mb">
           Online payment is <strong>off</strong> — the website shows “request a callback” instead. Set
-          <code> RAZORPAY_KEY_ID</code> and <code>RAZORPAY_KEY_SECRET</code> on the api-gateway to turn it on.
+          <code> CASHFREE_APP_ID</code> and <code>CASHFREE_SECRET_KEY</code> on the api-gateway to turn it on.
         </div>
       )}
       {mode?.enabled && mode.test && (
-        <div className="notice mb">Razorpay <strong>test mode</strong> — payments here are not real money.</div>
+        <div className="notice mb">Cashfree <strong>sandbox mode</strong> — payments here are not real money.</div>
       )}
 
       <div className="filter-bar mb">
@@ -104,7 +104,7 @@ const EnrollmentList: React.FC = () => {
                       {o.status === 'enrolled' && o.new_account && <div className="muted small">new account</div>}
                       {o.error && <div className="err small" title={o.error}>{o.error.slice(0, 80)}</div>}
                     </td>
-                    <td className="mono small">{o.razorpay_payment_id || '—'}</td>
+                    <td className="mono small" title={o.gateway === 'razorpay' ? 'Paid through Razorpay, before the switch to Cashfree' : undefined}>{o.payment_id || '—'}</td>
                     <td className="muted nowrap small">{new Date(o.paid_at || o.created_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}</td>
                   </tr>
                 );

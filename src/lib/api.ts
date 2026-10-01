@@ -1073,7 +1073,7 @@ export const deleteClass = (id: string) =>
 export const getClassRoster = (id: string, date: string) =>
   request<SessionRoster>('GET', `/api/admin/classes/${encodeURIComponent(id)}/attendance?date=${date}`);
 
-// ─── Online enrolments (Razorpay) ────────────────────────────────────────────
+// ─── Online enrolments (Cashfree) ────────────────────────────────────────────
 
 export interface EnrollmentOrder {
   id: string;
@@ -1085,8 +1085,10 @@ export interface EnrollmentOrder {
   name: string;
   email: string;
   phone: string;
-  razorpay_order_id: string;
-  razorpay_payment_id: string;
+  /** "cashfree", or "razorpay" for orders taken before the switch. */
+  gateway: string;
+  order_id: string;
+  payment_id: string;
   /** created (checkout opened, not paid) | paid | enrolled | failed */
   status: string;
   new_account: boolean;
