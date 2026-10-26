@@ -13,9 +13,9 @@ import {
 import { COURSES, courseName } from '../../lib/courses';
 
 const DEFAULT_SLABS: AwardSlab[] = [
-  { minPercent: 80, awardPercent: 100 },
-  { minPercent: 65, awardPercent: 50 },
-  { minPercent: 50, awardPercent: 25 },
+  { minPercent: 90, awardPercent: 30 },
+  { minPercent: 75, awardPercent: 20 },
+  { minPercent: 60, awardPercent: 10 },
 ];
 
 /**
