@@ -446,7 +446,17 @@ export interface Assessment {
   attempt_count?: number;
   /** Practice tests: courses whose students may take it; empty = every student. */
   course_ids?: string[];
+  /** Anti-cheating rules the test player enforces. Absent = all off. */
+  proctoring?: Proctoring | null;
   created_at?: string;
+}
+
+export interface Proctoring {
+  require_fullscreen: boolean;
+  /** Tab switches allowed before the test ends itself; 0 = log only, never end. */
+  tab_switch_limit: number;
+  block_copy_paste: boolean;
+  webcam: boolean;
 }
 
 // ─── Companies & hiring invites ───────────────────────────────────────────────
@@ -1199,6 +1209,8 @@ export interface CertificationExam {
   closes_at?: string;
   registrations: number;
   passed: number;
+  /** The paper draws questions from every course, not this exam's. */
+  unscoped_draw?: boolean;
 }
 
 export interface CertificationExamInput {

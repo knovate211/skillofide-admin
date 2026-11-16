@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import type { Proctoring } from '../../lib/api';
 import { useNavigate, useParams } from 'react-router-dom';
 import Layout from '../../components/Layout';
 import Confirm from '../../components/Confirm';
@@ -70,6 +71,15 @@ const TestEditor: React.FC = () => {
 
   const patch = (fields: Partial<Assessment>) => setA((prev) => (prev ? { ...prev, ...fields } : prev));
 
+  // Every field is sent on save so switching a rule off really switches it off.
+  const proctor: Proctoring = {
+    require_fullscreen: !!a?.proctoring?.require_fullscreen,
+    tab_switch_limit: Math.max(0, Number(a?.proctoring?.tab_switch_limit) || 0),
+    block_copy_paste: !!a?.proctoring?.block_copy_paste,
+    webcam: !!a?.proctoring?.webcam,
+  };
+  const patchProctor = (fields: Partial<Proctoring>) => patch({ proctoring: { ...proctor, ...fields } });
+
   const saveSettings = async () => {
     if (!a || !id) return;
     setBusy(true);
@@ -88,6 +98,7 @@ const TestEditor: React.FC = () => {
         reveal_results: !!a.reveal_results,
         purpose: a.purpose || 'practice',
         course_ids: a.course_ids || [],
+        proctoring: proctor,
       });
       push('success', 'Settings saved');
       load();
@@ -192,6 +203,29 @@ const TestEditor: React.FC = () => {
           <label className="row" style={{ gap: 6 }}><input type="checkbox" style={{ width: 'auto' }} checked={!!a.allow_backtrack} onChange={(e) => patch({ allow_backtrack: e.target.checked })} /> Allow backtrack</label>
           <label className="row" style={{ gap: 6 }} title="Candidates see one question at a time; the next unlocks once the current one is answered."><input type="checkbox" style={{ width: 'auto' }} checked={!!a.lock_forward} onChange={(e) => patch({ lock_forward: e.target.checked })} /> One question at a time</label>
           <label className="row" style={{ gap: 6 }}><input type="checkbox" style={{ width: 'auto' }} checked={!!a.reveal_results} onChange={(e) => patch({ reveal_results: e.target.checked })} /> Reveal results</label>
+        </div>
+        <div className="mb" style={{ borderTop: '1px solid var(--border, #e5e5e5)', paddingTop: 14 }}>
+          <h4 style={{ margin: '0 0 4px' }}>Proctoring</h4>
+          <p className="muted" style={{ margin: '0 0 10px', fontSize: 13 }}>
+            Tab switches, developer tools, screenshot keys and second monitors are always logged. These rules add
+            enforcement on top. Candidates see each one on the setup screen before they start.
+          </p>
+          <div className="row wrap" style={{ gap: 18, alignItems: 'center' }}>
+            <label className="row" style={{ gap: 6 }} title="The test only runs in fullscreen; leaving it is recorded and the candidate is asked to return.">
+              <input type="checkbox" style={{ width: 'auto' }} checked={proctor.require_fullscreen} onChange={(e) => patchProctor({ require_fullscreen: e.target.checked })} /> Require fullscreen
+            </label>
+            <label className="row" style={{ gap: 6 }} title="Copy, cut, paste and right-click are blocked, and each attempt is recorded.">
+              <input type="checkbox" style={{ width: 'auto' }} checked={proctor.block_copy_paste} onChange={(e) => patchProctor({ block_copy_paste: e.target.checked })} /> Block copy, paste &amp; right-click
+            </label>
+            <label className="row" style={{ gap: 6 }} title="Camera required. Flags the camera being covered or off, no face or several faces (where the browser supports it) and sustained talking. Nothing is recorded.">
+              <input type="checkbox" style={{ width: 'auto' }} checked={proctor.webcam} onChange={(e) => patchProctor({ webcam: e.target.checked })} /> Webcam monitoring
+            </label>
+            <label className="row" style={{ gap: 6 }}>
+              Tab-switch limit
+              <input type="number" min={0} style={{ width: 80 }} value={proctor.tab_switch_limit} onChange={(e) => patchProctor({ tab_switch_limit: Number(e.target.value) })} />
+              <span className="muted" style={{ fontSize: 12 }}>{proctor.tab_switch_limit > 0 ? `test ends after ${proctor.tab_switch_limit}` : '0 = log only, never end the test'}</span>
+            </label>
+          </div>
         </div>
         {a.purpose === 'practice' && (
           <div className="audience mb">

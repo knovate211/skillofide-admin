@@ -141,6 +141,12 @@ const ExamList: React.FC = () => {
                         <span className="badge archived">{e.assessment_status}</span>
                       )}
                     </div>
+                    {e.unscoped_draw && (
+                      <div className="danger-text" style={{ fontSize: 12, marginTop: 4 }}
+                           title="Open the paper in Tests and set a course in the section's draw settings.">
+                        Draws from every course — candidates may get off-topic questions
+                      </div>
+                    )}
                   </td>
                   <td className="nowrap">{rupees(e.price_rupees)}</td>
                   <td>{e.pass_percent}%</td>
