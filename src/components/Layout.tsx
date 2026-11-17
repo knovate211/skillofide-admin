@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { getUser, isRecruiter, logout } from '../lib/auth';
+import { getUser, isAdmin, isCollegeStaff, isRecruiter, logout } from '../lib/auth';
 import { resetCompany, retryCompany, setCompany, useCompany } from '../lib/company';
 import { useAlerts } from '../lib/alerts';
 import {
@@ -21,6 +21,7 @@ const groups: NavGroup[] = [
     links: [
       { to: '/users', label: 'All Users', icon: IconUsers },
       { to: '/import', label: 'Import Users', icon: IconUserPlus },
+      { to: '/colleges', label: 'Colleges', icon: IconCap },
     ],
   },
   {
@@ -75,6 +76,11 @@ const recruiterGroups: NavGroup[] = [
       { to: '/mcq-bank', label: 'Question Bank', icon: IconLayers },
     ],
   },
+];
+
+// A college placement cell has one screen: its own students.
+const collegeGroups: NavGroup[] = [
+  { links: [{ to: '/college', label: 'Our students', icon: IconUsers }] },
 ];
 
 const OPEN_KEY = 'admin_nav_open';
@@ -148,8 +154,10 @@ const Layout: React.FC<{
   const { companies, companyId, company, ready, failed } = useCompany();
   // Without a company a recruiter has nothing to act on, so page actions go too.
   const noCompany = recruiter && (!ready || companies.length === 0);
-  const nav = recruiter ? recruiterGroups : groups;
-  const alerts = useAlerts(!recruiter);
+  const college = isCollegeStaff();
+  const admin = isAdmin();
+  const nav = college ? collegeGroups : recruiter ? recruiterGroups : groups;
+  const alerts = useAlerts(admin);
 
   // The drawer on a phone closes once you pick a page.
   useEffect(() => setMobileOpen(false), [pathname]);
@@ -195,16 +203,20 @@ const Layout: React.FC<{
     navigate(q ? `/users?search=${encodeURIComponent(q)}` : '/users');
   };
 
-  const displayName = user?.name?.trim() || (recruiter ? 'Recruiter' : 'Admin');
-  const roleLabel = recruiter ? `Recruiter${company ? ` · ${company.name}` : ''}` : 'Administrator';
+  const displayName = user?.name?.trim() || (college ? 'Placement cell' : recruiter ? 'Recruiter' : 'Admin');
+  const roleLabel = college
+    ? 'Placement cell · view only'
+    : recruiter ? `Recruiter${company ? ` · ${company.name}` : ''}` : 'Administrator';
+  const home = college ? '/college' : recruiter ? '/tests' : '/dashboard';
+  const brand = college ? 'Knovate College' : recruiter ? 'Knovate Hiring' : 'Knovate Admin';
 
   return (
     <div className={`shell${collapsed ? ' nav-collapsed' : ''}${mobileOpen ? ' nav-mobile-open' : ''}`}>
       <div className="nav-scrim" onClick={() => setMobileOpen(false)} />
       <aside className="sidebar">
-        <Link to={recruiter ? '/tests' : '/dashboard'} className="brand" title={recruiter ? 'Knovate Hiring' : 'Knovate Admin'}>
+        <Link to={home} className="brand" title={brand}>
           <span className="brand-mark" aria-hidden>K</span>
-          <span className="brand-text">{recruiter ? 'Knovate Hiring' : 'Knovate Admin'}</span>
+          <span className="brand-text">{brand}</span>
         </Link>
         {recruiter && companies.length > 1 && (
           <select
@@ -279,7 +291,7 @@ const Layout: React.FC<{
           <button className="icon-btn" onClick={toggleNav} aria-label="Toggle navigation">
             <IconMenu size={20} />
           </button>
-          {!recruiter && (
+          {admin && (
             <form className="global-search" onSubmit={search} role="search">
               <IconSearch size={17} />
               <input
@@ -293,7 +305,7 @@ const Layout: React.FC<{
             </form>
           )}
           <span className="grow" />
-          {!recruiter && (
+          {admin && (
             <div className="popover-anchor" ref={bellRef}>
               <button className="icon-btn" onClick={() => setBellOpen((o) => !o)} aria-label={`Notifications: ${alerts.total} waiting`}>
                 <IconBell size={20} />

@@ -1538,3 +1538,86 @@ export const confirmPasswordReset = async (email: string, code: string, newPassw
   const data = await resp.json().catch(() => ({}));
   if (!resp.ok) throw new Error(data.error || 'Could not update the password.');
 };
+
+// ─── Colleges ────────────────────────────────────────────────────────────────
+//
+// Admin side: create colleges and attach placement-cell (TPO) accounts.
+// College side: the TPO's read-only view of their own linked students. The
+// gateway takes the college from the signed-in account, never from a parameter.
+
+export interface CollegeStaff { userId: string; name: string; email: string }
+export interface College {
+  id: string;
+  name: string;
+  city: string;
+  joinCode: string;
+  createdAt: string;
+  linked: number;
+  pending: number;
+  staff: CollegeStaff[];
+}
+
+export const listColleges = () => request<{ colleges: College[] }>('GET', '/api/college/admin/colleges');
+export const createCollege = (name: string, city: string) =>
+  request<{ id: string; name: string; city: string; joinCode: string }>('POST', '/api/college/admin/colleges', { name, city });
+export const regenerateCollegeCode = (id: string) =>
+  request<{ joinCode: string }>('POST', `/api/college/admin/colleges/${id}/code`);
+export const addCollegeStaff = (id: string, email: string) =>
+  request<{ userId: string; name: string; email: string; note: string }>('POST', `/api/college/admin/colleges/${id}/staff`, { email });
+export const removeCollegeStaff = (id: string, userId: string) =>
+  request<{ removed: boolean }>('DELETE', `/api/college/admin/colleges/${id}/staff/${userId}`);
+
+export interface CollegeOverview {
+  college: { id: string; name: string; joinCode: string };
+  linked: number;
+  joinedThisMonth: number;
+  pendingRequests: number;
+  active7d: number;
+  avgProgress: number;
+  certified: number;
+  certPassRate: number | null;
+  needsAttention: { inactive: number; lowAttendance: number; flagged: number };
+  inactiveAfterDays: number;
+  lowAttendancePct: number;
+}
+
+export interface CollegeStudent {
+  userId: string;
+  name: string;
+  email: string;
+  rollNo: string;
+  branch: string;
+  year: string;
+  linkedAt: string | null;
+  lastActiveAt: string | null;
+  courseTitle: string;
+  coursePercent: number;
+  attendancePercent: number | null;
+  attendanceSessions: number;
+  latestTest: { title: string; percent: number; endedByProctor: boolean } | null;
+  integrityFlag: boolean;
+  certificates: number;
+  certificateTitle: string;
+  inactive: boolean;
+  lowAttendance: boolean;
+}
+
+export type CollegeFilter = '' | 'inactive' | 'attendance' | 'flagged';
+export interface CollegeStudentQuery { q?: string; branch?: string; year?: string; filter?: CollegeFilter }
+
+const collegeQuery = (f: CollegeStudentQuery) => {
+  const p = new URLSearchParams();
+  Object.entries(f).forEach(([k, v]) => { if (v) p.set(k, v); });
+  return p.toString();
+};
+
+export const getCollegeOverview = () => request<CollegeOverview>('GET', '/api/college/overview');
+export const listCollegeStudents = (f: CollegeStudentQuery) =>
+  request<{ students: CollegeStudent[]; total: number; branches: string[]; years: string[] }>(
+    'GET', `/api/college/students?${collegeQuery(f)}`);
+export const exportCollegeStudents = (f: CollegeStudentQuery, filename: string) =>
+  downloadAuthed(`/api/college/students?${collegeQuery({ ...f })}&format=csv`, filename);
+
+export interface CollegeRosterRow { email: string; rollNo?: string; branch?: string; year?: string }
+export interface RosterResult { requested: number; updated: number; alreadyLinked: number; otherCollege: number; notFound: string[] }
+export const uploadCollegeRoster = (rows: CollegeRosterRow[]) => request<RosterResult>('POST', '/api/college/roster', { rows });

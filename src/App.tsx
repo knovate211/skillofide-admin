@@ -1,6 +1,6 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { isAdmin, isStaff, homePath } from './lib/auth';
+import { isAdmin, isStaff, isSignedIn, isCollegeStaff, homePath } from './lib/auth';
 import { loadCourses } from './lib/courses';
 import Login from './pages/Login';
 
@@ -29,16 +29,23 @@ const RegistrationList = React.lazy(() => import('./pages/Certifications/Registr
 const RewardList = React.lazy(() => import('./pages/Referrals/RewardList'));
 const ReferrerList = React.lazy(() => import('./pages/Referrals/ReferrerList'));
 const ProgramSettings = React.lazy(() => import('./pages/Referrals/ProgramSettings'));
+const CollegeList = React.lazy(() => import('./pages/Colleges/CollegeList'));
+const CollegeDashboard = React.lazy(() => import('./pages/College/CollegeDashboard'));
 
 // A recruiter who follows a link to an admin-only screen goes to their home
 // (the tests list) rather than the login page they are already past.
 const RequireAdmin: React.FC<{ children: React.ReactElement }> = ({ children }) =>
-  isAdmin() ? children : <Navigate to={isStaff() ? homePath() : '/login'} replace />;
+  isAdmin() ? children : <Navigate to={isSignedIn() ? homePath() : '/login'} replace />;
 
 // Screens recruiters share with admins. The backend scopes every call on them
 // to the recruiter's company.
 const RequireStaff: React.FC<{ children: React.ReactElement }> = ({ children }) =>
-  isStaff() ? children : <Navigate to="/login" replace />;
+  isStaff() ? children : <Navigate to={isSignedIn() ? homePath() : '/login'} replace />;
+
+// The college placement cell's view. The backend takes the college from the
+// signed-in account, never from the browser.
+const RequireCollegeStaff: React.FC<{ children: React.ReactElement }> = ({ children }) =>
+  isCollegeStaff() ? children : <Navigate to={isSignedIn() ? homePath() : '/login'} replace />;
 
 const App: React.FC = () => {
   React.useEffect(() => {
@@ -71,7 +78,9 @@ const App: React.FC = () => {
     <Route path="/referrals/settings" element={<RequireAdmin><ProgramSettings /></RequireAdmin>} />
     <Route path="/classes" element={<RequireAdmin><ClassList /></RequireAdmin>} />
     <Route path="/companies" element={<RequireAdmin><CompanyList /></RequireAdmin>} />
-    <Route path="*" element={<Navigate to={isStaff() ? homePath() : '/login'} replace />} />
+    <Route path="/colleges" element={<RequireAdmin><CollegeList /></RequireAdmin>} />
+    <Route path="/college" element={<RequireCollegeStaff><CollegeDashboard /></RequireCollegeStaff>} />
+    <Route path="*" element={<Navigate to={isSignedIn() ? homePath() : '/login'} replace />} />
   </Routes>
   </React.Suspense>
   );

@@ -35,13 +35,24 @@ export function isRecruiter(): boolean {
   return !!getToken() && getUser()?.role === 'recruiter';
 }
 
-/** Anyone allowed into the panel at all. */
+/** A college placement cell (TPO): sees only its own college's students. */
+export function isCollegeStaff(): boolean {
+  return !!getToken() && getUser()?.role === 'tpo';
+}
+
+/** Admins and recruiters: the screens that share tests and the question bank. */
 export function isStaff(): boolean {
   return isAdmin() || isRecruiter();
 }
 
-/** Where a signed-in user lands: recruiters have no dashboard. */
+/** Anyone allowed into the panel at all. */
+export function isSignedIn(): boolean {
+  return isStaff() || isCollegeStaff();
+}
+
+/** Where a signed-in user lands: recruiters and colleges have no dashboard. */
 export function homePath(): string {
+  if (isCollegeStaff()) return '/college';
   return isRecruiter() ? '/tests' : '/dashboard';
 }
 
@@ -64,7 +75,7 @@ export async function login(email: string, password: string): Promise<AdminUser>
   }
 
   const data = (await resp.json()) as { token: string; user: AdminUser };
-  if (data.user?.role !== 'admin' && data.user?.role !== 'recruiter') {
+  if (data.user?.role !== 'admin' && data.user?.role !== 'recruiter' && data.user?.role !== 'tpo') {
     throw new Error('This account does not have access to the admin panel.');
   }
 

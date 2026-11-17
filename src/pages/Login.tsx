@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { login, isStaff, homePath } from '../lib/auth';
+import { login, isSignedIn, homePath } from '../lib/auth';
 import { requestPasswordReset, confirmPasswordReset } from '../lib/api';
 
 /** The K mark, drawn rather than shipped as an asset so it stays crisp. */
@@ -63,7 +63,7 @@ const Login: React.FC = () => {
   const [resetBusy, setResetBusy] = useState(false);
 
   useEffect(() => {
-    if (isStaff()) navigate(homePath(), { replace: true });
+    if (isSignedIn()) navigate(homePath(), { replace: true });
   }, [navigate]);
 
   const submit = async (e: React.FormEvent) => {

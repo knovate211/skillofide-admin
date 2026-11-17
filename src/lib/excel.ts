@@ -317,3 +317,44 @@ export async function downloadCandidateTemplate(): Promise<void> {
   XLSX.utils.book_append_sheet(wb, ws, 'Candidates');
   XLSX.writeFile(wb, 'candidates-template.xlsx');
 }
+
+// ─── College student list ────────────────────────────────────────────────────
+//
+// A placement cell's list of its students: email plus optional roll number,
+// branch and year. Only the email is needed — it is how the student's existing
+// Knovate account is found.
+
+export interface RosterParsed {
+  rows: { email: string; rollNo: string; branch: string; year: string }[];
+  invalid: number[]; // 1-based sheet rows with a missing or malformed email
+}
+
+const ROSTER_HEADERS: Record<string, 'email' | 'rollNo' | 'branch' | 'year'> = {
+  email: 'email', emailaddress: 'email', emailid: 'email', mail: 'email',
+  rollno: 'rollNo', rollnumber: 'rollNo', roll: 'rollNo', regno: 'rollNo', registrationno: 'rollNo',
+  registrationnumber: 'rollNo', usn: 'rollNo', enrollmentno: 'rollNo', enrolmentno: 'rollNo', prn: 'rollNo',
+  branch: 'branch', department: 'branch', dept: 'branch', stream: 'branch', discipline: 'branch',
+  year: 'year', batch: 'year', yearofstudy: 'year', semester: 'year', passingyear: 'year', graduationyear: 'year',
+};
+
+export async function parseRoster(file: File): Promise<RosterParsed> {
+  const XLSX = await loadXLSX();
+  const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+  const sheet = wb.Sheets[wb.SheetNames[0]];
+  const raw: Record<string, any>[] = XLSX.utils.sheet_to_json(sheet, { defval: '', raw: false });
+  const out: RosterParsed = { rows: [], invalid: [] };
+  raw.forEach((r, i) => {
+    const m: Record<string, string> = {};
+    for (const key of Object.keys(r)) {
+      const field = ROSTER_HEADERS[norm(key).replace(/[.#]/g, '')];
+      if (field && !m[field]) m[field] = String(r[key] ?? '').trim();
+    }
+    const email = (m.email || '').toLowerCase();
+    if (!EMAIL_RE.test(email)) {
+      out.invalid.push(i + 2); // +1 for the header row, +1 for 1-based
+      return;
+    }
+    out.rows.push({ email, rollNo: m.rollNo || '', branch: m.branch || '', year: m.year || '' });
+  });
+  return out;
+}
