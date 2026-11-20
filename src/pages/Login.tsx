@@ -3,15 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { login, isSignedIn, homePath } from '../lib/auth';
 import { requestPasswordReset, confirmPasswordReset } from '../lib/api';
 
-/** The K mark, drawn rather than shipped as an asset so it stays crisp. */
-const Mark: React.FC<{ size?: number }> = ({ size = 34 }) => (
-  <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden>
-    <path d="M4 3h7v26H4z" fill="var(--accent)" />
-    <path d="M11 16 21 3h8L19 16z" fill="#e0a24f" />
-    <path d="M11 16h8l10 13h-8z" fill="var(--accent-strong)" />
-  </svg>
-);
-
 const MailIcon = () => (
   <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
     <rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" />
@@ -137,7 +128,7 @@ const Login: React.FC = () => {
       {/* ── Brand panel ── */}
       <section className="login-brand">
         <header className="login-brand-head">
-          <span className="login-logo"><Mark /> Knovate</span>
+          <span className="login-logo"><img src="/knovate-logo.svg" alt="Knovate" height={46} /></span>
           <span className="login-sub">Admin Panel</span>
         </header>
 
@@ -159,7 +150,7 @@ const Login: React.FC = () => {
       {/* ── Sign-in card ── */}
       <section className="login-panel">
         <form className="login-card" onSubmit={submit}>
-          <span className="login-logo login-card-logo"><Mark size={30} /> Knovate</span>
+          <span className="login-logo login-card-logo"><img src="/knovate-logo.svg" alt="Knovate" height={40} /></span>
           <h2>Admin login</h2>
           <p className="login-card-sub">Sign in with your admin or recruiter account.</p>
 

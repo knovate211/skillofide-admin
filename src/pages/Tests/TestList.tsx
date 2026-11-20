@@ -38,6 +38,21 @@ const asPurpose = (v: string): Purpose =>
   TYPES.some((t) => t.value === v && t.value !== 'practice') ? (v as Purpose) : 'practice';
 const TYPE_KEYS = ['type'] as const;
 
+const HINTS: Record<Purpose, string> = {
+  practice: 'Open to enrolled students in their practice list.',
+  scholarship: 'Publish here, then attach under Scholarship Programmes.',
+  certification: 'Publish here, then price it under Cert Exams.',
+  hiring: 'Invite-only. Publish, then add candidates — each gets an emailed link.',
+};
+
+// What each purpose starts with, so a new test needs fewer changes.
+const PURPOSES: { value: Purpose; title: string; text: string; duration: number; attempts: number; proctored: boolean }[] = [
+  { value: 'practice', title: 'Practice', text: 'Students revise a course. Open to enrolled students, answers shown after.', duration: 30, attempts: 3, proctored: false },
+  { value: 'scholarship', title: 'Scholarship', text: 'Screening paper for a scholarship programme. Invite-only.', duration: 60, attempts: 1, proctored: true },
+  { value: 'certification', title: 'Certification', text: 'Paid exam that issues a certificate. Proctored, 2 attempts.', duration: 90, attempts: 2, proctored: true },
+  { value: 'hiring', title: 'Hiring', text: 'Assessment for a company’s candidates. Invite-only.', duration: 60, attempts: 1, proctored: true },
+];
+
 const TestList: React.FC = () => {
   const { push } = useToast();
   const navigate = useNavigate();
@@ -64,6 +79,8 @@ const TestList: React.FC = () => {
   // A recruiter only ever sees their own company's hiring tests.
   const { recruiter, companyId, company } = useCompany();
   const purpose: Purpose = recruiter ? 'hiring' : asPurpose(filters.type);
+  const [search, setSearch] = useState('');
+  const [status, setStatus] = useState('');
 
   const loadCompanies = useCallback(async () => {
     try {
@@ -83,7 +100,7 @@ const TestList: React.FC = () => {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await listAssessments(`purpose=${purpose}&pageSize=200`);
+      const res = await listAssessments(recruiter ? 'purpose=hiring&pageSize=500' : 'pageSize=500');
       // "Delete" on a test that has attempts archives it (the results are
       // kept), so archived tests are ones someone chose to remove.
       setTests((res.assessments || []).filter((t) => t.status !== 'archived'));
@@ -92,7 +109,7 @@ const TestList: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [push, purpose, companyId]);
+  }, [push, recruiter, companyId]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -104,6 +121,7 @@ const TestList: React.FC = () => {
       push('error', 'Choose the company this hiring test is for');
       return;
     }
+    const preset = PURPOSES.find((p) => p.value === newPurpose)!;
     setBusy(true);
     try {
       // No company => a platform test an admin owns. Hiring tests belong to
@@ -114,7 +132,14 @@ const TestList: React.FC = () => {
         company_id: newPurpose === 'hiring' ? ownerCompany : undefined,
         course_ids: newPurpose === 'practice' && newCourse ? [newCourse] : [],
         duration_minutes: Number(duration) || 60,
-        max_attempts: 1,
+        max_attempts: preset.attempts,
+        reveal_results: newPurpose === 'practice',
+        allow_backtrack: true,
+        shuffle_questions: preset.proctored,
+        shuffle_options: preset.proctored,
+        proctoring: preset.proctored
+          ? { require_fullscreen: true, tab_switch_limit: 3, block_copy_paste: true, webcam: newPurpose === 'certification' }
+          : null,
       });
       push('success', 'Test created');
       setCreating(false);
@@ -189,16 +214,34 @@ const TestList: React.FC = () => {
     }
   };
 
-  const cols = purpose === 'practice' || (purpose === 'hiring' && !recruiter) ? 7 : 6;
+  const [menuFor, setMenuFor] = useState<string | null>(null);
+  useEffect(() => {
+    if (!menuFor) return;
+    const close = () => setMenuFor(null);
+    window.addEventListener('click', close);
+    return () => window.removeEventListener('click', close);
+  }, [menuFor]);
+
+  const shown = tests
+    .filter((t) => (t.purpose || 'practice') === purpose)
+    .filter((t) => !status || (status === 'live' ? t.status === 'published' : t.status !== 'published'))
+    .filter((t) => !search.trim() || t.title.toLowerCase().includes(search.trim().toLowerCase()));
+  const countFor = (p: string) => tests.filter((t) => (t.purpose || 'practice') === p).length;
+
+  const audience = (t: Assessment) =>
+    t.purpose === 'practice'
+      ? (t.course_ids?.length ? t.course_ids.map(courseName).join(', ') : 'All students')
+      : t.purpose === 'hiring' ? (t.company_name ? `Invite-only · ${t.company_name}` : 'Invite-only')
+      : t.purpose === 'certification' ? 'Paid · invite on purchase'
+      : 'Invite-only · scholarship';
 
   return (
     <Layout
       title={recruiter ? `Hiring tests${company ? ` — ${company.name}` : ''}` : 'Tests'}
-      actions={<button onClick={() => { setNewPurpose(purpose); setCreating(true); }}>New test</button>}
+      actions={<button onClick={() => { setNewPurpose(purpose); setCreating(true); }}>+ New test</button>}
     >
-      <div className="filter-bar mb">
-        {!recruiter && (
-        <div className="seg" role="tablist" aria-label="Test type">
+      {!recruiter && (
+        <div className="tl-tabs mb" role="tablist" aria-label="Test type">
           {TYPES.map((t) => (
             <button
               key={t.value}
@@ -207,77 +250,74 @@ const TestList: React.FC = () => {
               className={purpose === t.value ? 'on' : ''}
               onClick={() => setFilter('type', t.value === 'practice' ? '' : t.value)}
             >
-              {t.label}
+              {t.label} <span className="tl-count">{countFor(t.value)}</span>
             </button>
           ))}
         </div>
-        )}
+      )}
+      <div className="filter-bar mb">
+        <input className="tl-search" placeholder="Search tests…" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <div className="seg" aria-label="Status">
+          {[['', 'All'], ['live', 'Live'], ['draft', 'Drafts']].map(([v, l]) => (
+            <button key={v} className={status === v ? 'on' : ''} onClick={() => setStatus(v)}>{l}</button>
+          ))}
+        </div>
         <span className="grow" />
-        {purpose === 'scholarship' && (
-          <span className="muted small">
-            To open a scholarship for a course: duplicate a paper, rename it, publish it, then attach it under Scholarship Programmes.
-          </span>
-        )}
-        {purpose === 'certification' && (
-          <span className="muted small">
-            Build and publish the paper here, then price it under Cert Exams. Candidates are emailed a link once they pay.
-          </span>
-        )}
-        {purpose === 'hiring' && (
-          <span className="muted small">
-            Hiring tests belong to a company and are invite-only. Build the paper, publish it, then add candidates — each one is emailed a link to the test.
-          </span>
-        )}
-      </div>
-      <div className="scroll-x">
-        <table className="card">
-          <thead>
-            <tr><th>Title</th>{purpose === 'practice' && <th>For</th>}{purpose === 'hiring' && !recruiter && <th>Company</th>}<th>Status</th><th>Duration</th><th>Questions</th><th>Attempts</th><th></th></tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr><td colSpan={cols} className="muted">Loading…</td></tr>
-            ) : tests.length === 0 ? (
-              <tr><td colSpan={cols} className="muted">No {purpose} tests yet. Create one to get started.</td></tr>
-            ) : (
-              tests.map((t) => (
-                <tr key={t.id}>
-                  <td><a onClick={() => navigate(`/tests/${t.id}`)} style={{ cursor: 'pointer' }}>{t.title}</a></td>
-                  {purpose === 'practice' && (
-                    <td>
-                      {t.course_ids?.length
-                        ? t.course_ids.map((c) => <span key={c} className="chip">{courseName(c)}</span>)
-                        : <span className="muted">All students</span>}
-                    </td>
-                  )}
-                  {purpose === 'hiring' && !recruiter && (
-                    <td>{t.company_name || <span className="muted">—</span>}</td>
-                  )}
-                  <td><span className={`badge ${t.status}`}>{t.status}</span></td>
-                  <td>{t.duration_minutes} min</td>
-                  <td>{t.question_count || '—'}</td>
-                  <td>{t.attempt_count ?? 0}</td>
-                  <td className="actions">
-                    <button className="ghost sm" onClick={() => navigate(`/tests/${t.id}`)}>Edit</button>
-                    {purpose === 'hiring' && (
-                      <button className="ghost sm" onClick={() => setInviting(t)}>Candidates</button>
-                    )}
-                    <button className="ghost sm" onClick={() => navigate(`/tests/${t.id}/results`)}>Results</button>
-                    <button className="ghost sm" onClick={() => togglePublish(t)}>
-                      {t.status === 'published' ? 'Unpublish' : 'Publish'}
-                    </button>
-                    {!recruiter && <button className="ghost sm" onClick={() => startDuplicate(t)}>Duplicate</button>}
-                    <button className="ghost sm danger-text" onClick={() => setDeleting(t)}>Delete</button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+        <span className="muted small tl-hint">{HINTS[purpose]}</span>
       </div>
 
+      {loading ? (
+        <div className="muted">Loading…</div>
+      ) : shown.length === 0 ? (
+        <div className="card card-pad muted">
+          {tests.length && countFor(purpose) ? 'No tests match this search.' : `No ${purpose} tests yet. Create one to get started.`}
+        </div>
+      ) : (
+        <div className="tl-list">
+          {shown.map((t) => {
+            const live = t.status === 'published';
+            const qs = t.question_count || 0;
+            return (
+              <div key={t.id} className="card tl-row">
+                <div className="tl-main" onClick={() => navigate(`/tests/${t.id}`)}>
+                  <div className="tl-title">
+                    <span className={`tl-dot${live ? ' live' : ''}`} />
+                    {t.title}
+                    <span className={`badge ${t.status}`}>{live ? 'Live' : 'Draft'}</span>
+                  </div>
+                  <div className="tl-facts">
+                    <span>{qs ? `${qs} question${qs === 1 ? '' : 's'}` : 'No questions yet'}</span>
+                    {!!t.total_marks && <span>{t.total_marks} marks</span>}
+                    <span>{t.duration_minutes} min</span>
+                    <span>{audience(t)}</span>
+                    <span>{t.attempt_count ?? 0} attempt{(t.attempt_count ?? 0) === 1 ? '' : 's'}</span>
+                  </div>
+                  {!live && !qs && <div className="tl-draft">Add questions before you can publish</div>}
+                </div>
+                <div className="tl-actions">
+                  <button className="secondary sm" onClick={() => navigate(`/tests/${t.id}`)}>Edit</button>
+                  {purpose === 'hiring' && <button className="secondary sm" onClick={() => setInviting(t)}>Candidates</button>}
+                  <button className="secondary sm" onClick={() => navigate(`/tests/${t.id}/results`)}>Results</button>
+                  <div className="tl-menu-wrap">
+                    <button className="ghost sm" aria-label="More actions"
+                      onClick={(e) => { e.stopPropagation(); setMenuFor(menuFor === t.id ? null : t.id!); }}>⋯</button>
+                    {menuFor === t.id && (
+                      <div className="tl-menu card" onClick={(e) => e.stopPropagation()}>
+                        <button onClick={() => { setMenuFor(null); togglePublish(t); }}>{live ? 'Unpublish' : 'Publish'}</button>
+                        {!recruiter && <button onClick={() => { setMenuFor(null); startDuplicate(t); }}>Duplicate</button>}
+                        <button className="danger-item" onClick={() => { setMenuFor(null); setDeleting(t); }}>Delete</button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {creating && (
-        <Modal title="New test" onClose={() => setCreating(false)}>
+        <Modal title="New test — what is it for?" onClose={() => setCreating(false)}>
           <form onSubmit={doCreate}>
             <div className="field">
               <label>Title *</label>
@@ -285,13 +325,21 @@ const TestList: React.FC = () => {
             </div>
             {!recruiter && (
             <div className="field">
-              <label>Type</label>
-              <select value={newPurpose} onChange={(e) => setNewPurpose(e.target.value as Purpose)}>
-                <option value="practice">Practice test — for enrolled students</option>
-                <option value="scholarship">Scholarship test — invite-only, used by Scholarship Programmes</option>
-                <option value="certification">Certification paper — invite-only, sold under Cert Exams</option>
-                <option value="hiring">Hiring test — for a company, invite-only</option>
-              </select>
+              <label>What is it for?</label>
+              <div className="tl-purposes">
+                {PURPOSES.map((p) => (
+                  <button type="button" key={p.value}
+                    className={`tl-purpose${newPurpose === p.value ? ' on' : ''}`}
+                    onClick={() => { setNewPurpose(p.value); setDuration(p.duration); }}>
+                    <strong>{p.title}</strong>
+                    <span>{p.text}</span>
+                  </button>
+                ))}
+              </div>
+              <p className="muted small" style={{ margin: '6px 0 0' }}>
+                Starts with {PURPOSES.find((p) => p.value === newPurpose)!.attempts} attempt(s)
+                {PURPOSES.find((p) => p.value === newPurpose)!.proctored ? ' and proctoring on' : ''}. You can change everything later.
+              </p>
             </div>
             )}
             {!recruiter && newPurpose === 'hiring' && (

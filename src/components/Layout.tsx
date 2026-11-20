@@ -50,20 +50,14 @@ const groups: NavGroup[] = [
     ],
   },
   {
-    heading: 'Referrals',
+    heading: 'More',
     links: [
-      { to: '/referrals', label: 'Rewards', icon: IconGift },
+      { to: '/companies', label: 'Companies', icon: IconBuilding },
+      { to: '/referrals', label: 'Referral rewards', icon: IconGift },
       { to: '/referrals/referrers', label: 'Referrers', icon: IconUsers },
-      { to: '/referrals/settings', label: 'Programme', icon: IconSliders },
+      { to: '/referrals/settings', label: 'Referral programme', icon: IconSliders },
+      { to: '/audit', label: 'Audit log', icon: IconShield },
     ],
-  },
-  {
-    heading: 'Hiring',
-    links: [{ to: '/companies', label: 'Companies', icon: IconBuilding }],
-  },
-  {
-    heading: 'Settings',
-    links: [{ to: '/audit', label: 'Audit Log', icon: IconShield }],
   },
 ];
 
@@ -83,7 +77,29 @@ const collegeGroups: NavGroup[] = [
   { links: [{ to: '/college', label: 'Our students', icon: IconUsers }] },
 ];
 
-const OPEN_KEY = 'admin_nav_open';
+// One line under each page title saying what the page is for.
+const PAGE_HINTS: Record<string, string> = {
+  '/users': 'Everyone with an account — students, recruiters and staff.',
+  '/import': 'Add many students at once from a spreadsheet.',
+  '/colleges': 'Colleges whose placement cells can follow their students.',
+  '/classes': 'Scheduled live classes and their attendance.',
+  '/tests': 'Practice, scholarship, certification and hiring papers.',
+  '/mcq-bank': 'Multiple-choice questions that tests draw from.',
+  '/problems': 'Coding problems and their test cases.',
+  '/enrollments': 'Students enrolled in each course.',
+  '/enquiries': 'Messages from the website contact and course forms.',
+  '/scholarship': 'Scholarship applications and their test results.',
+  '/scholarship/programmes': 'Open scholarships and the paper each one uses.',
+  '/certifications': 'Certificates issued to candidates.',
+  '/certifications/exams': 'Certification exams on sale and their prices.',
+  '/companies': 'Hiring companies and their recruiters.',
+  '/referrals': 'Rewards earned through referrals.',
+  '/referrals/referrers': 'Students who have referred others.',
+  '/referrals/settings': 'How the referral programme pays out.',
+  '/audit': 'Who changed what, and when.',
+};
+
+const OPEN_KEY = 'admin_nav_v2_open';
 const COLLAPSED_KEY = 'admin_nav_collapsed';
 
 // Per-browser UI memory. Storage can be unavailable (private mode, blocked
@@ -136,7 +152,9 @@ const Layout: React.FC<{
   children: React.ReactNode;
   /** The page draws its own header (the dashboard's greeting). */
   hideHeader?: boolean;
-}> = ({ title, actions, children, hideHeader = false }) => {
+  /** One line under the title; defaults to the page's entry in PAGE_HINTS. */
+  subtitle?: string;
+}> = ({ title, actions, children, hideHeader = false, subtitle }) => {
   const navigate = useNavigate();
   const user = getUser();
   const { pathname } = useLocation();
@@ -215,8 +233,8 @@ const Layout: React.FC<{
       <div className="nav-scrim" onClick={() => setMobileOpen(false)} />
       <aside className="sidebar">
         <Link to={home} className="brand" title={brand}>
-          <span className="brand-mark" aria-hidden>K</span>
-          <span className="brand-text">{brand}</span>
+          <img className="brand-mark" src="/knovate-mark-light.svg" alt="" aria-hidden />
+          <span className="brand-text"><img className="brand-logo" src="/knovate-logo-light.svg" alt="Knovate" /><span className="brand-sub">{brand.replace(/^Knovate\s*/, '')}</span></span>
         </Link>
         {recruiter && companies.length > 1 && (
           <select
@@ -247,9 +265,9 @@ const Layout: React.FC<{
             if (!g.heading) return <div key={i} className="nav-group open">{links}</div>;
 
             // The section holding the current page is always open — collapsing
-            // it would hide where you are. Others default to open until closed.
+            // it would hide where you are. Others stay closed until opened, which keeps the menu short.
             const current = g.links.some((l) => inSection(pathname, l.to));
-            const isOpen = collapsed || current || open[g.heading] !== false;
+            const isOpen = collapsed || current || open[g.heading] === true;
             const id = `nav-${g.heading.toLowerCase()}`;
             return (
               <div key={g.heading} className={`nav-group${isOpen ? ' open' : ''}`}>
@@ -352,7 +370,12 @@ const Layout: React.FC<{
         <div className="content">
           {!hideHeader && (
             <div className="page-head">
-              <h1>{title}</h1>
+              <div>
+                <h1>{title}</h1>
+                {(subtitle ?? (admin ? PAGE_HINTS[pathname] : undefined)) && (
+                  <p className="page-sub">{subtitle ?? PAGE_HINTS[pathname]}</p>
+                )}
+              </div>
               <div className="row">{noCompany ? null : actions}</div>
             </div>
           )}
