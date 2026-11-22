@@ -1,139 +1,403 @@
-import React from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
-import { getUser, logout } from '../lib/auth';
+import React, { useEffect, useRef, useState } from 'react';
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { getUser, isAdmin, isCollegeStaff, isRecruiter, logout } from '../lib/auth';
+import { resetCompany, retryCompany, setCompany, useCompany } from '../lib/company';
+import { useAlerts } from '../lib/alerts';
+import {
+  IconAward, IconBell, IconBuilding, IconCalendar, IconChevronDown, IconClipboard, IconCode, IconFile,
+  IconCap, IconGift, IconHome, IconLayers, IconLogout, IconMenu, IconMessage, IconSearch, IconShield,
+  IconSliders, IconStar, IconUserCheck, IconUserPlus, IconUsers,
+} from './Icons';
 
-/* Icons are inline so the panel keeps its zero icon-library footprint. Each is
-   a 16px stroked glyph that inherits colour from the nav link around it. */
-const Icon: React.FC<{ d: React.ReactNode }> = ({ d }) => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"
-       strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    {d}
-  </svg>
-);
+// Grouped by the job an admin is doing, so related screens sit together and a
+// label only has to make sense within its group.
+type NavLinkDef = { to: string; label: string; icon: React.FC<{ size?: number }> };
+type NavGroup = { heading?: string; links: NavLinkDef[] };
 
-const icons = {
-  users: <Icon d={<><path d="M16 19v-1.5a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4V19" /><circle cx="9" cy="7" r="3.2" /><path d="M22 19v-1.5a4 4 0 0 0-3-3.87M16.5 4.13a4 4 0 0 1 0 7.75" /></>} />,
-  upload: <Icon d={<><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="m8 8 4-4 4 4" /><path d="M12 4v12" /></>} />,
-  tests: <Icon d={<><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" /><path d="m9 15 2 2 4-4" /></>} />,
-  bank: <Icon d={<><circle cx="12" cy="12" r="9.2" /><path d="M9.2 9.3a2.9 2.9 0 1 1 3.9 2.7c-.7.3-1.1.9-1.1 1.6v.5" /><path d="M12 17.4h.01" /></>} />,
-  inbox: <Icon d={<><path d="M22 12h-6l-2 3h-4l-2-3H2" /><path d="M5.4 5.8 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.4-6.2a2 2 0 0 0-1.8-1.1H7.2a2 2 0 0 0-1.8 1.1Z" /></>} />,
-  award: <Icon d={<><circle cx="12" cy="9" r="5.5" /><path d="m8.2 13.6-1.4 7.2 5.2-2.7 5.2 2.7-1.4-7.2" /></>} />,
-  calendar: <Icon d={<><rect x="3" y="4.8" width="18" height="16.2" rx="2" /><path d="M3 10h18M8 2.8v4M16 2.8v4" /></>} />,
-};
-
-/* Grouped so the seven destinations read as three jobs rather than one list. */
-const sections: { title: string; links: { to: string; label: string; icon: React.ReactNode }[] }[] = [
+const groups: NavGroup[] = [
+  { links: [{ to: '/dashboard', label: 'Dashboard', icon: IconHome }] },
   {
-    title: 'People',
+    heading: 'Students',
     links: [
-      { to: '/users', label: 'Users', icon: icons.users },
-      { to: '/import', label: 'Bulk Import', icon: icons.upload },
+      { to: '/users', label: 'All Users', icon: IconUsers },
+      { to: '/import', label: 'Import Users', icon: IconUserPlus },
+      { to: '/colleges', label: 'Colleges', icon: IconCap },
     ],
   },
   {
-    title: 'Assessment',
+    heading: 'Learning',
     links: [
-      { to: '/tests', label: 'Tests', icon: icons.tests },
-      { to: '/mcq-bank', label: 'Question Bank', icon: icons.bank },
+      { to: '/classes', label: 'Live Classes', icon: IconCalendar },
+      { to: '/tests', label: 'Tests', icon: IconClipboard },
+      { to: '/mcq-bank', label: 'Question Bank', icon: IconLayers },
+      { to: '/problems', label: 'Coding Problems', icon: IconCode },
     ],
   },
   {
-    title: 'Admissions',
+    heading: 'Admissions',
     links: [
-      { to: '/enquiries', label: 'Enquiries', icon: icons.inbox },
-      { to: '/scholarship', label: 'Scholarship', icon: icons.award },
-      { to: '/scholarship/programmes', label: 'Programmes', icon: icons.calendar },
+      { to: '/enrollments', label: 'Enrolments', icon: IconUserCheck },
+      { to: '/enquiries', label: 'Enquiries', icon: IconMessage },
+      { to: '/scholarship', label: 'Applications', icon: IconFile },
+      { to: '/scholarship/programmes', label: 'Scholarship Programmes', icon: IconAward },
+    ],
+  },
+  {
+    heading: 'Certification',
+    links: [
+      { to: '/certifications', label: 'Certifications', icon: IconCap },
+      { to: '/certifications/exams', label: 'Cert Exams', icon: IconStar },
+    ],
+  },
+  {
+    heading: 'More',
+    links: [
+      { to: '/companies', label: 'Companies', icon: IconBuilding },
+      { to: '/referrals', label: 'Referral rewards', icon: IconGift },
+      { to: '/referrals/referrers', label: 'Referrers', icon: IconUsers },
+      { to: '/referrals/settings', label: 'Referral programme', icon: IconSliders },
+      { to: '/audit', label: 'Audit log', icon: IconShield },
     ],
   },
 ];
 
-const initials = (user: { name?: string; email?: string } | null) => {
-  const source = user?.name?.trim() || user?.email || '';
-  const parts = source.split(/[\s@._-]+/).filter(Boolean);
-  return (parts[0]?.[0] ?? 'A') + (parts[1]?.[0] ?? '');
+// Recruiters only run their company's hiring tests, so they get a flat menu
+// of the screens the backend lets them use.
+const recruiterGroups: NavGroup[] = [
+  {
+    links: [
+      { to: '/tests', label: 'Hiring Tests', icon: IconClipboard },
+      { to: '/mcq-bank', label: 'Question Bank', icon: IconLayers },
+    ],
+  },
+];
+
+// A college placement cell has one screen: its own students.
+const collegeGroups: NavGroup[] = [
+  { links: [{ to: '/college', label: 'Our students', icon: IconUsers }] },
+];
+
+// One line under each page title saying what the page is for.
+const PAGE_HINTS: Record<string, string> = {
+  '/users': 'Everyone with an account — students, recruiters and staff.',
+  '/import': 'Add many students at once from a spreadsheet.',
+  '/colleges': 'Colleges whose placement cells can follow their students.',
+  '/classes': 'Scheduled live classes and their attendance.',
+  '/tests': 'Practice, scholarship, certification and hiring papers.',
+  '/mcq-bank': 'Multiple-choice questions that tests draw from.',
+  '/problems': 'Coding problems and their test cases.',
+  '/enrollments': 'Students enrolled in each course.',
+  '/enquiries': 'Messages from the website contact and course forms.',
+  '/scholarship': 'Scholarship applications and their test results.',
+  '/scholarship/programmes': 'Open scholarships and the paper each one uses.',
+  '/certifications': 'Certificates issued to candidates.',
+  '/certifications/exams': 'Certification exams on sale and their prices.',
+  '/companies': 'Hiring companies and their recruiters.',
+  '/referrals': 'Rewards earned through referrals.',
+  '/referrals/referrers': 'Students who have referred others.',
+  '/referrals/settings': 'How the referral programme pays out.',
+  '/audit': 'Who changed what, and when.',
 };
 
-const Layout: React.FC<{ title: string; actions?: React.ReactNode; children: React.ReactNode }> = ({
-  title,
-  actions,
-  children,
-}) => {
+const OPEN_KEY = 'admin_nav_v2_open';
+const COLLAPSED_KEY = 'admin_nav_collapsed';
+
+// Per-browser UI memory. Storage can be unavailable (private mode, blocked
+// site data), so every access is guarded.
+function readJSON<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+function writeJSON(key: string, v: unknown) {
+  try {
+    localStorage.setItem(key, JSON.stringify(v));
+  } catch {
+    /* not remembered — fine */
+  }
+}
+
+// A page belongs to a section when its path starts with one of the section's
+// links, so /tests/123/results still counts as inside Learning.
+const inSection = (path: string, to: string) => path === to || path.startsWith(to + '/');
+
+const initials = (s: string) =>
+  s.split(/[\s@._-]+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join('') || '?';
+
+/** Closes a popover when the user clicks anywhere outside it or presses Escape. */
+function useDismiss(open: boolean, close: () => void) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) close();
+    };
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && close();
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open, close]);
+  return ref;
+}
+
+const Layout: React.FC<{
+  title: string;
+  actions?: React.ReactNode;
+  children: React.ReactNode;
+  /** The page draws its own header (the dashboard's greeting). */
+  hideHeader?: boolean;
+  /** One line under the title; defaults to the page's entry in PAGE_HINTS. */
+  subtitle?: string;
+}> = ({ title, actions, children, hideHeader = false, subtitle }) => {
   const navigate = useNavigate();
   const user = getUser();
-  const [navOpen, setNavOpen] = React.useState(false);
+  const { pathname } = useLocation();
+  const [open, setOpen] = useState<Record<string, boolean>>(() => readJSON(OPEN_KEY, {}));
+  const [collapsed, setCollapsed] = useState<boolean>(() => readJSON(COLLAPSED_KEY, false));
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [bellOpen, setBellOpen] = useState(false);
+  const [meOpen, setMeOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const searchRef = useRef<HTMLInputElement>(null);
+  const bellRef = useDismiss(bellOpen, () => setBellOpen(false));
+  const meRef = useDismiss(meOpen, () => setMeOpen(false));
 
-  React.useEffect(() => {
-    document.title = `${title} · Knovate Admin`;
-  }, [title]);
+  const recruiter = isRecruiter();
+  const { companies, companyId, company, ready, failed } = useCompany();
+  // Without a company a recruiter has nothing to act on, so page actions go too.
+  const noCompany = recruiter && (!ready || companies.length === 0);
+  const college = isCollegeStaff();
+  const admin = isAdmin();
+  const nav = college ? collegeGroups : recruiter ? recruiterGroups : groups;
+  const alerts = useAlerts(admin);
+
+  // The drawer on a phone closes once you pick a page.
+  useEffect(() => setMobileOpen(false), [pathname]);
+
+  // ⌘K / Ctrl+K jumps to the search box, as it does in most admin tools.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        searchRef.current?.focus();
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
+
+  const toggleGroup = (heading: string, isOpen: boolean) => {
+    const next = { ...open, [heading]: !isOpen };
+    setOpen(next);
+    writeJSON(OPEN_KEY, next);
+  };
+
+  const toggleNav = () => {
+    if (window.matchMedia('(max-width: 900px)').matches) {
+      setMobileOpen((o) => !o);
+    } else {
+      setCollapsed((c) => {
+        writeJSON(COLLAPSED_KEY, !c);
+        return !c;
+      });
+    }
+  };
 
   const doLogout = () => {
     logout();
+    resetCompany();
     navigate('/login', { replace: true });
   };
 
+  const search = (e: React.FormEvent) => {
+    e.preventDefault();
+    const q = query.trim();
+    navigate(q ? `/users?search=${encodeURIComponent(q)}` : '/users');
+  };
+
+  const displayName = user?.name?.trim() || (college ? 'Placement cell' : recruiter ? 'Recruiter' : 'Admin');
+  const roleLabel = college
+    ? 'Placement cell · view only'
+    : recruiter ? `Recruiter${company ? ` · ${company.name}` : ''}` : 'Administrator';
+  const home = college ? '/college' : recruiter ? '/tests' : '/dashboard';
+  const brand = college ? 'Knovate College' : recruiter ? 'Knovate Hiring' : 'Knovate Admin';
+
   return (
-    <div className="shell">
-      <aside className={`sidebar${navOpen ? ' open' : ''}`}>
-        <div className="brand">
-          <span className="mark" aria-hidden="true">K</span>
-          <span>
-            Knovate
-            <small>Admin</small>
-          </span>
-        </div>
+    <div className={`shell${collapsed ? ' nav-collapsed' : ''}${mobileOpen ? ' nav-mobile-open' : ''}`}>
+      <div className="nav-scrim" onClick={() => setMobileOpen(false)} />
+      <aside className="sidebar">
+        <Link to={home} className="brand" title={brand}>
+          <img className="brand-mark" src="/knovate-mark-light.svg" alt="" aria-hidden />
+          <span className="brand-text"><img className="brand-logo" src="/knovate-logo-light.svg" alt="Knovate" /><span className="brand-sub">{brand.replace(/^Knovate\s*/, '')}</span></span>
+        </Link>
+        {recruiter && companies.length > 1 && (
+          <select
+            className="company-switch"
+            aria-label="Company"
+            value={companyId}
+            onChange={(e) => {
+              setCompany(e.target.value);
+              // Every list on screen belongs to the old company; reload it.
+              navigate(pathname.startsWith('/mcq-bank') ? '/mcq-bank' : '/tests', { replace: true });
+            }}
+          >
+            {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        )}
+        {recruiter && companies.length === 1 && <div className="company-name">{company?.name}</div>}
+        <nav>
+          {nav.map((g, i) => {
+            const links = g.links.map((l) => (
+              // `end` on every link: without it /scholarship stays highlighted
+              // while you are on /scholarship/programmes, so the sidebar shows two
+              // active items and neither tells you where you are.
+              <NavLink key={l.to} to={l.to} end title={l.label} className={({ isActive }) => (isActive ? 'active' : '')}>
+                <l.icon size={18} />
+                <span className="nav-label">{l.label}</span>
+              </NavLink>
+            ));
+            if (!g.heading) return <div key={i} className="nav-group open">{links}</div>;
 
-        {/* The sidebar is an overlay on narrow screens, so following a link has to
-            close it — otherwise the page you land on stays hidden behind it. */}
-        <nav onClick={() => setNavOpen(false)}>
-          {sections.map((s) => (
-            <React.Fragment key={s.title}>
-              <div className="group">{s.title}</div>
-              {s.links.map((l) => (
-                // `end` on every link: without it /scholarship stays highlighted
-                // while you are on /scholarship/programmes, so the sidebar shows two
-                // active items and neither tells you where you are.
-                <NavLink key={l.to} to={l.to} end className={({ isActive }) => (isActive ? 'active' : '')}>
-                  {l.icon}
-                  {l.label}
-                </NavLink>
-              ))}
-            </React.Fragment>
-          ))}
+            // The section holding the current page is always open — collapsing
+            // it would hide where you are. Others stay closed until opened, which keeps the menu short.
+            const current = g.links.some((l) => inSection(pathname, l.to));
+            const isOpen = collapsed || current || open[g.heading] === true;
+            const id = `nav-${g.heading.toLowerCase()}`;
+            return (
+              <div key={g.heading} className={`nav-group${isOpen ? ' open' : ''}`}>
+                <button
+                  type="button"
+                  className="nav-heading"
+                  aria-expanded={isOpen}
+                  aria-controls={id}
+                  disabled={current}
+                  title={current ? 'Contains the current page' : undefined}
+                  onClick={() => toggleGroup(g.heading!, isOpen)}
+                >
+                  <span>{g.heading}</span>
+                  <IconChevronDown size={14} className="chev" />
+                </button>
+                <div id={id} className="nav-items">
+                  <div>{links}</div>
+                </div>
+              </div>
+            );
+          })}
         </nav>
-
         <div className="spacer" />
-
-        <div className="who">
-          <span className="avatar" aria-hidden="true">{initials(user)}</span>
-          <span className="id">
-            <b>{user?.name || 'Administrator'}</b>
-            <span title={user?.email}>{user?.email}</span>
-          </span>
+        <div className="me-card">
+          <span className="avatar" aria-hidden>{initials(displayName)}</span>
+          <div className="me-text">
+            <div className="me-email" title={user?.email}>{user?.email}</div>
+            <div className="me-role">{roleLabel}</div>
+          </div>
         </div>
-        <button className="secondary" onClick={doLogout}>Sign out</button>
+        <button className="signout" onClick={doLogout} title="Sign out">
+          <IconLogout size={17} />
+          <span className="nav-label">Sign out</span>
+        </button>
       </aside>
 
-      {navOpen && <div className="scrim" onClick={() => setNavOpen(false)} />}
-
       <div className="main">
-        <div className="topbar">
-          <div className="row grow">
-            <button
-              className="secondary nav-toggle"
-              aria-label="Open navigation"
-              aria-expanded={navOpen}
-              onClick={() => setNavOpen((v) => !v)}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                   strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-                <path d="M4 7h16M4 12h16M4 17h16" />
-              </svg>
+        <header className="topbar">
+          <button className="icon-btn" onClick={toggleNav} aria-label="Toggle navigation">
+            <IconMenu size={20} />
+          </button>
+          {admin && (
+            <form className="global-search" onSubmit={search} role="search">
+              <IconSearch size={17} />
+              <input
+                ref={searchRef}
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search users by name or email…"
+                aria-label="Search users"
+              />
+              <kbd>⌘ K</kbd>
+            </form>
+          )}
+          <span className="grow" />
+          {admin && (
+            <div className="popover-anchor" ref={bellRef}>
+              <button className="icon-btn" onClick={() => setBellOpen((o) => !o)} aria-label={`Notifications: ${alerts.total} waiting`}>
+                <IconBell size={20} />
+                {alerts.total > 0 && <span className="bell-count">{alerts.total > 99 ? '99+' : alerts.total}</span>}
+              </button>
+              {bellOpen && (
+                <div className="popover">
+                  <div className="popover-head">Needs your attention</div>
+                  {alerts.items.length === 0 ? (
+                    <p className="muted small" style={{ padding: '4px 14px 12px', margin: 0 }}>All caught up.</p>
+                  ) : (
+                    alerts.items.map((a) => (
+                      <Link key={a.label} to={a.to} className="popover-item" onClick={() => setBellOpen(false)}>
+                        <span>{a.label}</span>
+                        <span className="popover-count">{a.count}</span>
+                      </Link>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+          <div className="popover-anchor" ref={meRef}>
+            <button className="me-chip" onClick={() => setMeOpen((o) => !o)} aria-haspopup="menu" aria-expanded={meOpen}>
+              <span className="avatar sm" aria-hidden>{initials(displayName)}</span>
+              <span className="me-chip-name">{displayName}</span>
+              <IconChevronDown size={15} />
             </button>
-            <h1>{title}</h1>
+            {meOpen && (
+              <div className="popover" role="menu">
+                <div className="popover-head">
+                  {user?.email}
+                  <div className="muted small" style={{ fontWeight: 500 }}>{roleLabel}</div>
+                </div>
+                <button className="popover-item" role="menuitem" onClick={doLogout}>
+                  <span>Sign out</span>
+                  <IconLogout size={16} />
+                </button>
+              </div>
+            )}
           </div>
-          <div className="row">{actions}</div>
+        </header>
+
+        <div className="content">
+          {!hideHeader && (
+            <div className="page-head">
+              <div>
+                <h1>{title}</h1>
+                {(subtitle ?? (admin ? PAGE_HINTS[pathname] : undefined)) && (
+                  <p className="page-sub">{subtitle ?? PAGE_HINTS[pathname]}</p>
+                )}
+              </div>
+              <div className="row">{noCompany ? null : actions}</div>
+            </div>
+          )}
+          {recruiter && ready && failed ? (
+            <div className="card card-pad">
+              <h3 style={{ marginTop: 0 }}>Couldn&apos;t load your company</h3>
+              <p className="muted">Check your connection and try again.</p>
+              <button onClick={retryCompany}>Try again</button>
+            </div>
+          ) : recruiter && ready && companies.length === 0 ? (
+            <div className="card card-pad">
+              <h3 style={{ marginTop: 0 }}>Your account isn&apos;t linked to a company yet</h3>
+              <p className="muted" style={{ marginBottom: 0 }}>
+                Ask the Knovate team to add you to your company. Once they do, your company&apos;s hiring tests appear here.
+              </p>
+            </div>
+          ) : recruiter && !ready ? (
+            <p className="muted">Loading…</p>
+          ) : (
+            children
+          )}
         </div>
-        <div className="content">{children}</div>
       </div>
     </div>
   );

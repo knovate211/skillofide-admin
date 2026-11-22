@@ -1,6 +1,7 @@
-// Auth for the admin panel. We reuse the platform's /api/login. Only role=admin
-// is allowed past the login screen; a student/recruiter token is rejected here
-// even though the backend would accept it elsewhere.
+// Auth for the admin panel. We reuse the platform's /api/login. Admins get the
+// whole panel; recruiters get a hiring-only view of their own company (the
+// backend enforces the company scope — the UI only hides what they can't use).
+// Students and applicants are rejected here.
 
 export interface AdminUser {
   id: string;
@@ -30,6 +31,31 @@ export function isAdmin(): boolean {
   return !!getToken() && getUser()?.role === 'admin';
 }
 
+export function isRecruiter(): boolean {
+  return !!getToken() && getUser()?.role === 'recruiter';
+}
+
+/** A college placement cell (TPO): sees only its own college's students. */
+export function isCollegeStaff(): boolean {
+  return !!getToken() && getUser()?.role === 'tpo';
+}
+
+/** Admins and recruiters: the screens that share tests and the question bank. */
+export function isStaff(): boolean {
+  return isAdmin() || isRecruiter();
+}
+
+/** Anyone allowed into the panel at all. */
+export function isSignedIn(): boolean {
+  return isStaff() || isCollegeStaff();
+}
+
+/** Where a signed-in user lands: recruiters and colleges have no dashboard. */
+export function homePath(): string {
+  if (isCollegeStaff()) return '/college';
+  return isRecruiter() ? '/tests' : '/dashboard';
+}
+
 export async function login(email: string, password: string): Promise<AdminUser> {
   const resp = await fetch('/api/login', {
     method: 'POST',
@@ -49,8 +75,8 @@ export async function login(email: string, password: string): Promise<AdminUser>
   }
 
   const data = (await resp.json()) as { token: string; user: AdminUser };
-  if (data.user?.role !== 'admin') {
-    throw new Error('This account is not an administrator.');
+  if (data.user?.role !== 'admin' && data.user?.role !== 'recruiter' && data.user?.role !== 'tpo') {
+    throw new Error('This account does not have access to the admin panel.');
   }
 
   localStorage.setItem(TOKEN_KEY, data.token);

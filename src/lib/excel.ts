@@ -1,7 +1,11 @@
 // Excel/CSV parsing for the bulk-user import, built on SheetJS.
-import * as XLSX from 'xlsx';
 import { resolveCourseId, COURSES } from './courses';
 import type { ImportUserRow } from './api';
+
+// SheetJS is about 430 KB and only needed when a file is read or written, so it
+// is fetched then rather than shipped with every screen that can open an
+// import dialog (the tests list among them).
+const loadXLSX = () => import('xlsx');
 
 export interface ParsedRow {
   row: number; // 1-based row number in the sheet (excludes header)
@@ -46,6 +50,7 @@ function genPassword(): string {
 }
 
 export async function parseFile(file: File): Promise<ParsedRow[]> {
+  const XLSX = await loadXLSX();
   const buf = await file.arrayBuffer();
   const wb = XLSX.read(buf, { type: 'array' });
   const sheet = wb.Sheets[wb.SheetNames[0]];
@@ -121,7 +126,8 @@ export function toImportRows(rows: ParsedRow[]): ImportUserRow[] {
 
 // Builds a downloadable .xlsx template with the expected headers, an example row,
 // and a second sheet listing valid course ids/names.
-export function downloadTemplate(): void {
+export async function downloadTemplate(): Promise<void> {
+  const XLSX = await loadXLSX();
   const headers = ['name', 'email', 'phone', 'password', 'role', 'courses'];
   const example = [
     'Jane Doe',
@@ -146,7 +152,8 @@ export function downloadTemplate(): void {
 // Download an email→password sheet so the admin can hand out temporary
 // credentials after a bulk import (passwords are hashed server-side and cannot
 // be recovered later).
-export function downloadCredentials(rows: ParsedRow[]): void {
+export async function downloadCredentials(rows: ParsedRow[]): Promise<void> {
+  const XLSX = await loadXLSX();
   const data = [
     ['name', 'email', 'password', 'role'],
     ...rows.map((r) => [r.name, r.email, r.password, r.role]),
@@ -185,6 +192,7 @@ const MCQ_HEADER: Record<string, string> = {
 };
 
 export async function parseMcqFile(file: File): Promise<ParsedMcq[]> {
+  const XLSX = await loadXLSX();
   const buf = await file.arrayBuffer();
   const wb = XLSX.read(buf, { type: 'array' });
   const sheet = wb.Sheets[wb.SheetNames[0]];
@@ -243,11 +251,110 @@ export async function parseMcqFile(file: File): Promise<ParsedMcq[]> {
   });
 }
 
-export function downloadMcqTemplate(): void {
+export async function downloadMcqTemplate(): Promise<void> {
+  const XLSX = await loadXLSX();
   const headers = ['question', 'option1', 'option2', 'option3', 'option4', 'correct', 'topic', 'difficulty', 'type', 'explanation'];
   const example = ['What is 2+2?', '3', '4', '5', '6', '2', 'Math', 'Easy', 'single', 'Basic arithmetic'];
   const ws = XLSX.utils.aoa_to_sheet([headers, example]);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Questions');
   XLSX.writeFile(wb, 'mcq-import-template.xlsx');
+}
+
+// ─── Hiring candidates ──────────────────────────────────────────────────────
+// Bulk "add candidates" for a hiring test: name, email and phone per row. Any
+// header spelling the user import accepts works here too ("Full Name",
+// "Email Address", "Mobile"…). Rows are validated before anything is sent.
+
+export interface ParsedCandidate {
+  row: number;
+  name: string;
+  email: string;
+  phone: string;
+  errors: string[];
+}
+
+const CANDIDATE_HEADERS: Record<string, 'name' | 'email' | 'phone'> = {
+  name: 'name', fullname: 'name', candidate: 'name', candidatename: 'name',
+  email: 'email', emailaddress: 'email', emailid: 'email', mail: 'email',
+  phone: 'phone', phonenumber: 'phone', mobile: 'phone', mobilenumber: 'phone', contact: 'phone',
+};
+
+export async function parseCandidateFile(file: File): Promise<ParsedCandidate[]> {
+  const XLSX = await loadXLSX();
+  const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+  const sheet = wb.Sheets[wb.SheetNames[0]];
+  const rows: Record<string, any>[] = XLSX.utils.sheet_to_json(sheet, { defval: '', raw: false });
+  const seen = new Set<string>();
+
+  return rows
+    .map((raw, i) => {
+      const out: ParsedCandidate = { row: i + 2, name: '', email: '', phone: '', errors: [] };
+      for (const [k, v] of Object.entries(raw)) {
+        const field = CANDIDATE_HEADERS[norm(k)];
+        if (field) out[field] = String(v ?? '').trim();
+      }
+      out.email = out.email.toLowerCase();
+      if (!out.email) out.errors.push('missing email');
+      else if (!EMAIL_RE.test(out.email)) out.errors.push('invalid email');
+      else if (seen.has(out.email)) out.errors.push('listed twice in the file');
+      if (out.email) seen.add(out.email);
+      return out;
+    })
+    // A fully blank row (common at the bottom of a sheet) is not an error.
+    .filter((r) => r.name || r.email || r.phone);
+}
+
+export async function downloadCandidateTemplate(): Promise<void> {
+  const XLSX = await loadXLSX();
+  const ws = XLSX.utils.aoa_to_sheet([
+    ['Name', 'Email', 'Phone'],
+    ['Asha Rao', 'asha@example.com', '9876543210'],
+    ['Ravi Kumar', 'ravi@example.com', ''],
+  ]);
+  ws['!cols'] = [{ wch: 24 }, { wch: 30 }, { wch: 16 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Candidates');
+  XLSX.writeFile(wb, 'candidates-template.xlsx');
+}
+
+// ─── College student list ────────────────────────────────────────────────────
+//
+// A placement cell's list of its students: email plus optional roll number,
+// branch and year. Only the email is needed — it is how the student's existing
+// Knovate account is found.
+
+export interface RosterParsed {
+  rows: { email: string; rollNo: string; branch: string; year: string }[];
+  invalid: number[]; // 1-based sheet rows with a missing or malformed email
+}
+
+const ROSTER_HEADERS: Record<string, 'email' | 'rollNo' | 'branch' | 'year'> = {
+  email: 'email', emailaddress: 'email', emailid: 'email', mail: 'email',
+  rollno: 'rollNo', rollnumber: 'rollNo', roll: 'rollNo', regno: 'rollNo', registrationno: 'rollNo',
+  registrationnumber: 'rollNo', usn: 'rollNo', enrollmentno: 'rollNo', enrolmentno: 'rollNo', prn: 'rollNo',
+  branch: 'branch', department: 'branch', dept: 'branch', stream: 'branch', discipline: 'branch',
+  year: 'year', batch: 'year', yearofstudy: 'year', semester: 'year', passingyear: 'year', graduationyear: 'year',
+};
+
+export async function parseRoster(file: File): Promise<RosterParsed> {
+  const XLSX = await loadXLSX();
+  const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+  const sheet = wb.Sheets[wb.SheetNames[0]];
+  const raw: Record<string, any>[] = XLSX.utils.sheet_to_json(sheet, { defval: '', raw: false });
+  const out: RosterParsed = { rows: [], invalid: [] };
+  raw.forEach((r, i) => {
+    const m: Record<string, string> = {};
+    for (const key of Object.keys(r)) {
+      const field = ROSTER_HEADERS[norm(key).replace(/[.#]/g, '')];
+      if (field && !m[field]) m[field] = String(r[key] ?? '').trim();
+    }
+    const email = (m.email || '').toLowerCase();
+    if (!EMAIL_RE.test(email)) {
+      out.invalid.push(i + 2); // +1 for the header row, +1 for 1-based
+      return;
+    }
+    out.rows.push({ email, rollNo: m.rollNo || '', branch: m.branch || '', year: m.year || '' });
+  });
+  return out;
 }

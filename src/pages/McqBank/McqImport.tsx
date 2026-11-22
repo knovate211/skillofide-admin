@@ -3,10 +3,19 @@ import Modal from '../../components/Modal';
 import { useToast } from '../../components/Toast';
 import { parseMcqFile, downloadMcqTemplate, type ParsedMcq } from '../../lib/excel';
 import { importMcq, type McqQuestion } from '../../lib/api';
+import { useCourses } from '../../lib/courses';
 
 // Bulk-import MCQ questions from an .xlsx/.csv into the bank via /mcq-bank/import.
-const McqImport: React.FC<{ onClose: () => void; onImported: () => void }> = ({ onClose, onImported }) => {
+const McqImport: React.FC<{ defaultCourse?: string; onClose: () => void; onImported: () => void }> = ({
+  defaultCourse = '',
+  onClose,
+  onImported,
+}) => {
   const { push } = useToast();
+  const courses = useCourses();
+  // One course per upload: a sheet is normally written for one course, and a
+  // per-row course column would be one more thing to get wrong in Excel.
+  const [courseId, setCourseId] = useState(defaultCourse);
   const [rows, setRows] = useState<ParsedMcq[]>([]);
   const [fileName, setFileName] = useState('');
   const [busy, setBusy] = useState(false);
@@ -27,6 +36,7 @@ const McqImport: React.FC<{ onClose: () => void; onImported: () => void }> = ({ 
     setBusy(true);
     try {
       const questions: McqQuestion[] = valid.map((r) => ({
+        course_id: courseId,
         topic: r.topic,
         difficulty: r.difficulty,
         body: r.body,
@@ -51,6 +61,13 @@ const McqImport: React.FC<{ onClose: () => void; onImported: () => void }> = ({ 
         Columns: <code>question, option1…optionN, correct, topic, difficulty, type, explanation</code>.
         <code>correct</code> is the 1-based option number (comma-separated for multiple).
       </p>
+      <div className="field">
+        <label>Add these questions to</label>
+        <select value={courseId} onChange={(e) => setCourseId(e.target.value)}>
+          <option value="">General — any course can use them</option>
+          {courses.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+      </div>
       <div className="row mb">
         <input type="file" accept=".xlsx,.xls,.csv" onChange={(e) => e.target.files?.[0] && onPick(e.target.files[0])} />
         <button className="secondary" onClick={downloadMcqTemplate}>Template</button>

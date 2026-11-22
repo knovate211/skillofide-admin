@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import Modal from '../../components/Modal';
 import { useToast } from '../../components/Toast';
 import { upsertMcq, type McqQuestion, type McqOption } from '../../lib/api';
+import { useCourses } from '../../lib/courses';
 
 const DIFFICULTIES = ['Easy', 'Medium', 'Hard'];
 
@@ -9,10 +10,14 @@ const blankOption = (i: number): McqOption => ({ body: '', is_correct: false, or
 
 const McqForm: React.FC<{
   existing?: McqQuestion;
+  /** Course a new question starts in — the one the bank is showing. */
+  defaultCourse?: string;
   onClose: () => void;
   onSaved: () => void;
-}> = ({ existing, onClose, onSaved }) => {
+}> = ({ existing, defaultCourse = '', onClose, onSaved }) => {
   const { push } = useToast();
+  const courses = useCourses();
+  const [courseId, setCourseId] = useState(existing ? existing.course_id || '' : defaultCourse);
   const [topic, setTopic] = useState(existing?.topic || 'General');
   const [difficulty, setDifficulty] = useState(existing?.difficulty || 'Medium');
   const [body, setBody] = useState(existing?.body || '');
@@ -51,6 +56,7 @@ const McqForm: React.FC<{
     try {
       await upsertMcq({
         id: existing?.id,
+        course_id: courseId,
         topic: topic.trim() || 'General',
         difficulty,
         body: body.trim(),
@@ -71,6 +77,13 @@ const McqForm: React.FC<{
   return (
     <Modal title={existing ? 'Edit question' : 'New question'} onClose={onClose}>
       <form onSubmit={save}>
+        <div className="field">
+          <label>Course</label>
+          <select value={courseId} onChange={(e) => setCourseId(e.target.value)}>
+            <option value="">General — any course can use it</option>
+            {courses.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </div>
         <div className="row">
           <div className="field grow">
             <label>Topic</label>
