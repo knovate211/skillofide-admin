@@ -911,3 +911,40 @@ img.brand-mark { background: none; border-radius: 0; width: 30px; height: 30px; 
 .shell:not(.nav-collapsed) .sidebar img.brand-mark { display: none; }
 .login-sub { margin-left: 0; }
 @media (max-width: 900px) { .shell.nav-collapsed .sidebar img.brand-mark { display: none; } }
+
+/* ── Merged from main: table loading/empty states, toast parts ── */
+:root { --bg-sunken: #efece5; --text-tertiary: #948b7c; }
+.row.end { justify-content: flex-end; }
+
+/* Skeleton rows, so a loading table keeps the shape of the table it becomes. */
+.skeleton {
+  display: block;
+  height: 11px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--bg-sunken) 25%, #e4e0d6 37%, var(--bg-sunken) 63%);
+  background-size: 400% 100%;
+  animation: shimmer 1.3s ease-in-out infinite;
+}
+@keyframes shimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }
+
+/* Empty state, shown inside a table cell or on its own. */
+.empty { padding: 40px 20px; text-align: center; }
+.empty .icon {
+  display: grid; place-items: center;
+  width: 40px; height: 40px; margin: 0 auto 12px;
+  border-radius: 50%;
+  background: var(--bg-sunken);
+  color: var(--text-tertiary);
+}
+.empty b { display: block; font-size: 14px; font-weight: 600; margin-bottom: 3px; }
+.empty p { margin: 0; color: var(--text-secondary); font-size: 13px; }
+
+/* Toasts keep stage's filled look; these lay out the icon and dismiss button. */
+.toast { display: flex; align-items: flex-start; gap: 10px; }
+.toast .toast-icon { flex-shrink: 0; margin-top: 1px; }
+.toast .toast-msg { flex: 1; min-width: 0; }
+.toast .toast-close {
+  background: none; border: none; padding: 0 2px; margin: -1px -4px 0 4px;
+  color: inherit; opacity: .75; font-size: 17px; line-height: 1; cursor: pointer;
+}
+.toast .toast-close:hover { background: none; opacity: 1; }

@@ -4,6 +4,7 @@ import Modal from '../../components/Modal';
 import Confirm from '../../components/Confirm';
 import TypeConfirm from '../../components/TypeConfirm';
 import SelectionBar from '../../components/SelectionBar';
+import TableState from '../../components/TableState';
 import { useToast } from '../../components/Toast';
 import {
   bulkDeleteScholarships,
@@ -211,10 +212,13 @@ const ApplicationList: React.FC = () => {
             </tr>
           </thead>
           <tbody>
-            {loading ? (
-              <tr><td colSpan={10} className="muted">Loading…</td></tr>
-            ) : rows.length === 0 ? (
-              <tr><td colSpan={10} className="muted">{active ? 'No applications match these filters.' : 'No applications yet.'}</td></tr>
+            {loading || rows.length === 0 ? (
+              <TableState
+                loading={loading}
+                columns={10}
+                title={active ? 'No applications match these filters' : 'No applications yet'}
+                hint={active ? 'Clear a filter to widen the search.' : 'Applications from the scholarship page land here.'}
+              />
             ) : (
               rows.map((a) => {
                 const p = pct(a);

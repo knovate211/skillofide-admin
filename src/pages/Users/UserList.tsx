@@ -6,6 +6,7 @@ import TypeConfirm from '../../components/TypeConfirm';
 import UserEditDrawer from './UserEditDrawer';
 import AddUserModal from './AddUserModal';
 import { useOpenOnNew } from '../../lib/useOpenOnNew';
+import TableState from '../../components/TableState';
 import { useToast } from '../../components/Toast';
 import {
   listUsers,
@@ -239,10 +240,13 @@ const UserList: React.FC = () => {
             </tr>
           </thead>
           <tbody>
-            {loading ? (
-              <tr><td colSpan={7} className="muted">Loading…</td></tr>
-            ) : users.length === 0 ? (
-              <tr><td colSpan={7} className="muted">No users found.</td></tr>
+            {loading || users.length === 0 ? (
+              <TableState
+                loading={loading}
+                columns={7}
+                title="No users found"
+                hint="Try a different search, or add a user."
+              />
             ) : (
               users.map((u) => (
                 <tr key={u.id} className={selected.has(u.id) ? 'selected' : ''}>

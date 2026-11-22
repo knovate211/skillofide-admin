@@ -4,6 +4,7 @@ import Modal from '../../components/Modal';
 import Confirm from '../../components/Confirm';
 import TypeConfirm from '../../components/TypeConfirm';
 import SelectionBar from '../../components/SelectionBar';
+import TableState from '../../components/TableState';
 import { useToast } from '../../components/Toast';
 import {
   listInquiries,
@@ -184,10 +185,13 @@ const InquiryList: React.FC = () => {
             </tr>
           </thead>
           <tbody>
-            {loading ? (
-              <tr><td colSpan={9} className="muted">Loading…</td></tr>
-            ) : rows.length === 0 ? (
-              <tr><td colSpan={9} className="muted">{active ? 'No enquiries match these filters.' : 'No enquiries yet.'}</td></tr>
+            {loading || rows.length === 0 ? (
+              <TableState
+                loading={loading}
+                columns={9}
+                title={active ? 'No enquiries match these filters' : 'No enquiries yet'}
+                hint={active ? 'Clear a filter to widen the search.' : 'Enquiries from the marketing site land here.'}
+              />
             ) : (
               rows.map((q) => (
                 <tr key={q.id} className={`clickable${sel.has(q.id) ? ' selected' : ''}`} onClick={() => setOpen(q)}>

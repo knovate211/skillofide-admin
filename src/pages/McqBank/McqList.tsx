@@ -3,6 +3,7 @@ import Layout from '../../components/Layout';
 import Confirm from '../../components/Confirm';
 import McqForm from './McqForm';
 import McqImport from './McqImport';
+import TableState from '../../components/TableState';
 import { useToast } from '../../components/Toast';
 import { useCompany } from '../../lib/company';
 import {
@@ -156,7 +157,7 @@ const McqList: React.FC = () => {
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={6} className="muted">Loading…</td></tr>
+                  <TableState loading columns={6} title="" />
                 ) : items.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="empty-cell">
